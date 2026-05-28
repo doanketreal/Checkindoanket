@@ -3,128 +3,82 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Checkin Doan Ket</title>
+    <title>Checkin Đoàn Kết - Đăng nhập</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>Checkin Doan Ket</h1>
-      <p class="subtitle">Web cham cong co tao tai khoan va dang nhap.</p>
+    <main class="container auth-page">
+      <h1>Checkin Đoàn Kết</h1>
+      <p class="subtitle">Tạo tài khoản, đăng nhập và mở cửa sổ chấm công.</p>
 
       <section class="card">
-        <div class="section-header">
-          <h2>Tai khoan</h2>
-        </div>
-
         <div class="auth-layout">
           <div class="auth-box">
-            <h3>Dang ky</h3>
-            <div class="grid">
+            <h2>Đăng ký</h2>
+            <div class="grid single-col">
               <label>
-                Ho va ten
-                <input id="registerFullName" type="text" placeholder="VD: Nguyen Van A" />
-              </label>
-              <label>
-                Ma nhan vien
-                <input id="registerEmployeeId" type="text" placeholder="VD: NV001" />
+                Họ và tên
+                <input id="registerFullName" type="text" placeholder="Ví dụ: Nguyễn Văn A" />
               </label>
               <label>
                 Username
-                <input id="registerUsername" type="text" placeholder="vd: nguyenvana" />
+                <input id="registerUsername" type="text" placeholder="Ví dụ: nguyenvana" />
               </label>
               <label>
-                Mat khau
-                <input id="registerPassword" type="password" placeholder="Toi thieu 6 ky tu" />
+                Mật khẩu
+                <input id="registerPassword" type="password" placeholder="Tối thiểu 6 ký tự" />
               </label>
             </div>
             <div class="actions">
-              <button id="registerBtn" class="btn in">Dang ky</button>
+              <button id="registerBtn" class="btn primary">Đăng ký</button>
             </div>
-            <p class="hint">Tai khoan dau tien duoc gan quyen admin.</p>
+            <p class="hint">Tài khoản đầu tiên sẽ được cấp quyền quản trị (admin).</p>
           </div>
 
           <div class="auth-box">
-            <h3>Dang nhap</h3>
-            <div class="grid">
+            <h2>Đăng nhập</h2>
+            <div class="grid single-col">
               <label>
                 Username
-                <input id="loginUsername" type="text" placeholder="Nhap username" />
+                <input id="loginUsername" type="text" placeholder="Nhập username" />
               </label>
               <label>
-                Mat khau
-                <input id="loginPassword" type="password" placeholder="Nhap mat khau" />
+                Mật khẩu
+                <input id="loginPassword" type="password" placeholder="Nhập mật khẩu" />
               </label>
             </div>
             <div class="actions">
-              <button id="loginBtn" class="btn out">Dang nhap</button>
-              <button id="logoutBtn" class="btn ghost">Dang xuat</button>
+              <button id="loginBtn" class="btn success">Đăng nhập</button>
+            </div>
+            <p class="hint">Sau khi đăng nhập thành công, hệ thống sẽ mở cửa sổ chấm công mới.</p>
+          </div>
+
+          <div class="auth-box">
+            <h2>Quên mật khẩu</h2>
+            <div class="grid single-col">
+              <label>
+                Username
+                <input id="resetUsername" type="text" placeholder="Nhập username cần đổi mật khẩu" />
+              </label>
+              <label>
+                Mã đặt lại
+                <input id="resetCode" type="text" placeholder="Nhập mã: doanketreal" />
+              </label>
+              <label>
+                Mật khẩu mới
+                <input id="resetNewPassword" type="password" placeholder="Nhập mật khẩu mới" />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="resetPasswordBtn" class="btn warning">Đổi mật khẩu</button>
             </div>
           </div>
         </div>
 
-        <p id="authStatus" class="status">Chua dang nhap.</p>
-      </section>
-
-      <section class="card hidden" id="attendanceCard">
-        <div class="section-header">
-          <h2>Cham cong</h2>
-          <p id="currentUserLabel" class="user-label"></p>
-        </div>
-        <div class="actions">
-          <button id="checkInBtn" class="btn in">Check-in</button>
-          <button id="checkOutBtn" class="btn out">Check-out</button>
-          <button id="refreshBtn" class="btn ghost">Tai lai du lieu</button>
-        </div>
-        <p id="status" class="status">San sang.</p>
-      </section>
-
-      <section class="card hidden" id="summaryCard">
-        <div class="section-header">
-          <h2>Tong hop hom nay</h2>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Ma NV</th>
-                <th>Ten</th>
-                <th>Tong gio</th>
-                <th>Lan cuoi</th>
-                <th>Thoi gian</th>
-              </tr>
-            </thead>
-            <tbody id="summaryBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card hidden" id="recordsCard">
-        <div class="section-header">
-          <h2>Lich su</h2>
-          <div class="filters" id="recordFilters">
-            <input id="filterEmployeeId" type="text" placeholder="Loc ma NV" />
-            <input id="filterDate" type="date" />
-            <button id="filterBtn" class="btn ghost">Loc</button>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Thoi gian</th>
-                <th>Ma NV</th>
-                <th>Ten</th>
-                <th>Tai khoan</th>
-                <th>Hanh dong</th>
-                <th>IP</th>
-              </tr>
-            </thead>
-            <tbody id="recordsBody"></tbody>
-          </table>
-        </div>
+        <p id="authStatus" class="status">Chưa đăng nhập.</p>
       </section>
     </main>
 
-    <script src="/app.js"></script>
+    <script src="/auth.js"></script>
   </body>
 </html>

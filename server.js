@@ -6,15 +6,15 @@ const { URL } = require('url');
 
 const PORT = Number(process.env.PORT || 3000);
 const AUTH_SECRET = String(process.env.AUTH_SECRET || 'please-change-this-secret-in-production');
+const RESET_PASSWORD_CODE = String(process.env.RESET_PASSWORD_CODE || 'doanketreal');
 const TOKEN_EXPIRES_SECONDS = 60 * 60 * 24 * 7;
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'attendance.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const EMPTY_DB = {
-  employees: {},
   users: {},
-  records: []
+  attendance: []
 };
 
 const CONTENT_TYPES = {
@@ -29,105 +29,90 @@ const CONTENT_TYPES = {
   '.ico': 'image/x-icon'
 };
 
-function toDayKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function getTodayDateKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
 }
 
-function normalizeEmployeeId(employeeId) {
-  return String(employeeId || '').trim().toUpperCase();
+function normalizeUsernameInput(username) {
+  return String(username || '').trim();
+}
+
+function usernameKeyFromInput(username) {
+  return normalizeUsernameInput(username).toLowerCase();
 }
 
 function normalizeName(name) {
   return String(name || '').trim();
 }
 
-function normalizeUsername(username) {
-  return String(username || '').trim().toLowerCase();
-}
-
 function isValidUsername(username) {
-  return /^[a-z0-9_]{3,30}$/.test(username);
+  return /^(?=.{3,30}$)[A-Za-z0-9_.-]+$/.test(username);
 }
 
 function isValidPassword(password) {
   return typeof password === 'string' && password.length >= 6 && password.length <= 128;
 }
 
+function isValidFullName(fullName) {
+  return typeof fullName === 'string' && fullName.trim().length >= 2 && fullName.trim().length <= 80;
+}
+
+function isValidDateKey(dateKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return false;
+  }
+
+  const [yearText, monthText, dayText] = dateKey.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const check = new Date(year, month - 1, day);
+  return (
+    check.getFullYear() === year && check.getMonth() === month - 1 && check.getDate() === day
+  );
+}
+
+function normalizeDateKey(value) {
+  const normalized = String(value || '').trim();
+  return isValidDateKey(normalized) ? normalized : '';
+}
+
+function normalizeMonthKey(value) {
+  const normalized = String(value || '').trim();
+
+  if (!/^\d{4}-\d{2}$/.test(normalized)) {
+    return '';
+  }
+
+  const [yearText, monthText] = normalized.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+
+  if (year < 2000 || year > 3000 || month < 1 || month > 12) {
+    return '';
+  }
+
+  return normalized;
+}
+
+function getDaysInMonth(monthKey) {
+  const [yearText, monthText] = monthKey.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+
+  return new Date(year, month, 0).getDate();
+}
+
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function sortByTimestampAsc(records) {
-  return records.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-}
-
-function getLastEmployeeAction(records, employeeId) {
-  const employeeRecords = sortByTimestampAsc(
-    records.filter((record) => record.employeeId === employeeId)
-  );
-
-  return employeeRecords.length ? employeeRecords[employeeRecords.length - 1] : null;
-}
-
-function isSameLocalDay(isoTimestamp, dayKey) {
-  return toDayKey(new Date(isoTimestamp)) === dayKey;
-}
-
-function summarizeToday(records, employees) {
-  const todayKey = toDayKey(new Date());
-  const grouped = new Map();
-
-  for (const record of records) {
-    if (!isSameLocalDay(record.timestamp, todayKey)) {
-      continue;
-    }
-
-    if (!grouped.has(record.employeeId)) {
-      grouped.set(record.employeeId, []);
-    }
-
-    grouped.get(record.employeeId).push(record);
-  }
-
-  const summary = [];
-
-  for (const [employeeId, employeeRecords] of grouped.entries()) {
-    const sorted = sortByTimestampAsc(employeeRecords);
-    let totalMs = 0;
-    let lastCheckIn = null;
-
-    for (const item of sorted) {
-      if (item.type === 'in') {
-        lastCheckIn = item;
-      }
-
-      if (item.type === 'out' && lastCheckIn) {
-        const inTime = new Date(lastCheckIn.timestamp).getTime();
-        const outTime = new Date(item.timestamp).getTime();
-
-        if (outTime > inTime) {
-          totalMs += outTime - inTime;
-        }
-
-        lastCheckIn = null;
-      }
-    }
-
-    const lastRecord = sorted[sorted.length - 1];
-
-    summary.push({
-      employeeId,
-      employeeName: employees[employeeId]?.name || '',
-      totalHoursToday: Number((totalMs / 1000 / 60 / 60).toFixed(2)),
-      lastAction: lastRecord.type,
-      lastActionAt: lastRecord.timestamp
-    });
-  }
-
-  return summary.sort((a, b) => a.employeeId.localeCompare(b.employeeId));
 }
 
 function getClientIp(req) {
@@ -152,9 +137,19 @@ function sanitizeUser(user) {
     id: user.id,
     username: user.username,
     fullName: user.fullName,
-    employeeId: user.employeeId,
     role: user.role,
     createdAt: user.createdAt
+  };
+}
+
+function sanitizeAttendanceRecord(record) {
+  return {
+    id: record.id,
+    username: record.username,
+    fullName: record.fullName,
+    date: record.date,
+    timestamp: record.timestamp,
+    ip: record.ip
   };
 }
 
@@ -198,7 +193,7 @@ function signTokenPart(headerEncoded, payloadEncoded) {
 function createToken(user) {
   const now = Math.floor(Date.now() / 1000);
   const payload = {
-    sub: user.username,
+    sub: user.usernameKey,
     role: user.role,
     exp: now + TOKEN_EXPIRES_SECONDS
   };
@@ -223,7 +218,6 @@ function verifyToken(token) {
 
   const [headerEncoded, payloadEncoded, signature] = parts;
   const expectedSignature = signTokenPart(headerEncoded, payloadEncoded);
-
   const signatureBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expectedSignature);
 
@@ -273,11 +267,59 @@ function getAuthenticatedUser(req, db) {
 
   const payload = verifyToken(token);
 
-  if (!payload) {
+  if (!payload?.sub) {
     return null;
   }
 
   return db.users[payload.sub] || null;
+}
+
+function getUserRecordForDate(db, usernameKey, dateKey) {
+  return db.attendance.find((record) => record.usernameKey === usernameKey && record.date === dateKey) || null;
+}
+
+function convertLegacyAttendanceIfNeeded(parsed) {
+  if (!Array.isArray(parsed.records) || parsed.records.length === 0) {
+    return [];
+  }
+
+  const converted = [];
+  const uniqueMap = new Set();
+
+  for (const item of parsed.records) {
+    const username = normalizeUsernameInput(item.username);
+    const usernameKey = usernameKeyFromInput(username);
+
+    if (!usernameKey || !item.timestamp) {
+      continue;
+    }
+
+    const date = normalizeDateKey(String(item.timestamp).slice(0, 10));
+
+    if (!date) {
+      continue;
+    }
+
+    const mapKey = `${usernameKey}::${date}`;
+
+    if (uniqueMap.has(mapKey)) {
+      continue;
+    }
+
+    uniqueMap.add(mapKey);
+
+    converted.push({
+      id: generateId(),
+      usernameKey,
+      username,
+      fullName: normalizeName(item.employeeName || item.fullName || ''),
+      date,
+      timestamp: item.timestamp,
+      ip: item.ip || 'unknown'
+    });
+  }
+
+  return converted;
 }
 
 async function ensureDataFile() {
@@ -300,11 +342,53 @@ async function readDb() {
   }
 
   const parsed = JSON.parse(normalizedRaw);
+  const usersRaw = parsed.users && typeof parsed.users === 'object' ? parsed.users : {};
+  const users = {};
+
+  for (const [mapKey, rawUser] of Object.entries(usersRaw)) {
+    const inferredUsername = normalizeUsernameInput(rawUser?.username || mapKey);
+    const normalizedKey = usernameKeyFromInput(rawUser?.usernameKey || inferredUsername);
+
+    if (!normalizedKey) {
+      continue;
+    }
+
+    users[normalizedKey] = {
+      ...rawUser,
+      username: inferredUsername,
+      usernameKey: normalizedKey,
+      fullName: normalizeName(rawUser?.fullName || rawUser?.employeeName || inferredUsername)
+    };
+  }
+
+  const attendanceRaw = Array.isArray(parsed.attendance)
+    ? parsed.attendance
+    : convertLegacyAttendanceIfNeeded(parsed);
+  const attendance = attendanceRaw
+    .map((item) => {
+      const username = normalizeUsernameInput(item?.username);
+      const usernameKey = usernameKeyFromInput(item?.usernameKey || username);
+      const date = normalizeDateKey(item?.date);
+
+      if (!usernameKey || !date) {
+        return null;
+      }
+
+      return {
+        id: String(item.id || generateId()),
+        usernameKey,
+        username,
+        fullName: normalizeName(item?.fullName || username),
+        date,
+        timestamp: item?.timestamp || new Date().toISOString(),
+        ip: item?.ip || 'unknown'
+      };
+    })
+    .filter(Boolean);
 
   return {
-    employees: parsed.employees && typeof parsed.employees === 'object' ? parsed.employees : {},
-    users: parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
-    records: Array.isArray(parsed.records) ? parsed.records : []
+    users,
+    attendance
   };
 }
 
@@ -320,7 +404,7 @@ function readRequestBody(req) {
       body += chunk.toString();
 
       if (body.length > 1_000_000) {
-        reject(new Error('Request body qua lon.'));
+        reject(new Error('Request body quá lớn.'));
         req.socket.destroy();
       }
     });
@@ -334,7 +418,7 @@ function readRequestBody(req) {
       try {
         resolve(JSON.parse(body));
       } catch {
-        reject(new Error('Body JSON khong hop le.'));
+        reject(new Error('Body JSON không hợp lệ.'));
       }
     });
 
@@ -346,11 +430,30 @@ function requireAuth(req, res, db) {
   const user = getAuthenticatedUser(req, db);
 
   if (!user) {
-    sendJson(res, 401, { error: 'Ban chua dang nhap hoac token khong hop le.' });
+    sendJson(res, 401, { error: 'Bạn chưa đăng nhập hoặc token không hợp lệ.' });
     return null;
   }
 
   return user;
+}
+
+function buildCalendarDays(db, user, monthKey) {
+  const daysInMonth = getDaysInMonth(monthKey);
+  const result = [];
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${monthKey}-${String(day).padStart(2, '0')}`;
+    const existing = getUserRecordForDate(db, user.usernameKey, date);
+
+    result.push({
+      date,
+      checked: Boolean(existing),
+      recordId: existing?.id || null,
+      checkedAt: existing?.timestamp || null
+    });
+  }
+
+  return result;
 }
 
 async function handleApi(req, res, requestUrl) {
@@ -364,46 +467,32 @@ async function handleApi(req, res, requestUrl) {
   if (pathname === '/api/auth/register' && req.method === 'POST') {
     try {
       const body = await readRequestBody(req);
-      const username = normalizeUsername(body.username);
-      const password = String(body.password || '');
+      const usernameInput = normalizeUsernameInput(body.username);
+      const usernameKey = usernameKeyFromInput(body.username);
       const fullName = normalizeName(body.fullName);
-      const employeeId = normalizeEmployeeId(body.employeeId);
+      const password = String(body.password || '');
 
-      if (!isValidUsername(username)) {
+      if (!isValidFullName(fullName)) {
+        sendJson(res, 400, { error: 'Vui lòng nhập họ tên từ 2 đến 80 ký tự.' });
+        return true;
+      }
+
+      if (!isValidUsername(usernameInput)) {
         sendJson(res, 400, {
-          error: 'Username phai 3-30 ky tu, chi gom chu thuong, so, dau _.'
+          error: 'Username từ 3-30 ký tự, chỉ gồm chữ/số và . _ -'
         });
         return true;
       }
 
       if (!isValidPassword(password)) {
-        sendJson(res, 400, { error: 'Mat khau toi thieu 6 ky tu.' });
-        return true;
-      }
-
-      if (!employeeId) {
-        sendJson(res, 400, { error: 'Vui long nhap ma nhan vien.' });
-        return true;
-      }
-
-      if (!fullName) {
-        sendJson(res, 400, { error: 'Vui long nhap ho ten.' });
+        sendJson(res, 400, { error: 'Mật khẩu tối thiểu 6 ký tự.' });
         return true;
       }
 
       const db = await readDb();
 
-      if (db.users[username]) {
-        sendJson(res, 409, { error: 'Username da ton tai.' });
-        return true;
-      }
-
-      const duplicatedEmployee = Object.values(db.users).find(
-        (item) => item.employeeId === employeeId
-      );
-
-      if (duplicatedEmployee) {
-        sendJson(res, 409, { error: 'Ma nhan vien da duoc dang ky tai khoan khac.' });
+      if (db.users[usernameKey]) {
+        sendJson(res, 409, { error: 'Username đã tồn tại.' });
         return true;
       }
 
@@ -411,29 +500,27 @@ async function handleApi(req, res, requestUrl) {
       const role = Object.keys(db.users).length === 0 ? 'admin' : 'member';
       const newUser = {
         id: generateId(),
-        username,
+        username: usernameInput,
+        usernameKey,
         fullName,
-        employeeId,
         passwordSalt: salt,
         passwordHash: hash,
         role,
         createdAt: new Date().toISOString()
       };
 
-      db.users[username] = newUser;
-      db.employees[employeeId] = { name: fullName };
+      db.users[usernameKey] = newUser;
       await writeDb(db);
 
       const token = createToken(newUser);
-
       sendJson(res, 201, {
-        message: 'Dang ky thanh cong.',
+        message: 'Đăng ký thành công.',
         token,
         user: sanitizeUser(newUser)
       });
       return true;
     } catch (error) {
-      sendJson(res, 500, { error: error.message || 'Khong the dang ky tai khoan.' });
+      sendJson(res, 500, { error: error.message || 'Không thể đăng ký tài khoản.' });
       return true;
     }
   }
@@ -441,32 +528,77 @@ async function handleApi(req, res, requestUrl) {
   if (pathname === '/api/auth/login' && req.method === 'POST') {
     try {
       const body = await readRequestBody(req);
-      const username = normalizeUsername(body.username);
+      const usernameKey = usernameKeyFromInput(body.username);
       const password = String(body.password || '');
 
-      if (!username || !password) {
-        sendJson(res, 400, { error: 'Vui long nhap username va mat khau.' });
+      if (!usernameKey || !password) {
+        sendJson(res, 400, { error: 'Vui lòng nhập username và mật khẩu.' });
         return true;
       }
 
       const db = await readDb();
-      const user = db.users[username];
+      const user = db.users[usernameKey];
 
       if (!user || !verifyPassword(password, user)) {
-        sendJson(res, 401, { error: 'Sai username hoac mat khau.' });
+        sendJson(res, 401, { error: 'Sai username hoặc mật khẩu.' });
         return true;
       }
 
       const token = createToken(user);
-
       sendJson(res, 200, {
-        message: 'Dang nhap thanh cong.',
+        message: 'Đăng nhập thành công.',
         token,
         user: sanitizeUser(user)
       });
       return true;
     } catch (error) {
-      sendJson(res, 500, { error: error.message || 'Khong the dang nhap.' });
+      sendJson(res, 500, { error: error.message || 'Không thể đăng nhập.' });
+      return true;
+    }
+  }
+
+  if (pathname === '/api/auth/reset-password' && req.method === 'POST') {
+    try {
+      const body = await readRequestBody(req);
+      const usernameKey = usernameKeyFromInput(body.username);
+      const resetCode = String(body.resetCode || '').trim();
+      const newPassword = String(body.newPassword || '');
+
+      if (!usernameKey) {
+        sendJson(res, 400, { error: 'Vui lòng nhập username.' });
+        return true;
+      }
+
+      if (!isValidPassword(newPassword)) {
+        sendJson(res, 400, { error: 'Mật khẩu mới tối thiểu 6 ký tự.' });
+        return true;
+      }
+
+      if (resetCode !== RESET_PASSWORD_CODE) {
+        sendJson(res, 403, { error: 'Mã đặt lại mật khẩu không đúng.' });
+        return true;
+      }
+
+      const db = await readDb();
+      const user = db.users[usernameKey];
+
+      if (!user) {
+        sendJson(res, 404, { error: 'Không tìm thấy tài khoản.' });
+        return true;
+      }
+
+      const { salt, hash } = hashPassword(newPassword);
+      user.passwordSalt = salt;
+      user.passwordHash = hash;
+      user.updatedAt = new Date().toISOString();
+
+      db.users[usernameKey] = user;
+      await writeDb(db);
+
+      sendJson(res, 200, { message: 'Đổi mật khẩu thành công. Bạn có thể đăng nhập lại.' });
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Không thể đặt lại mật khẩu.' });
       return true;
     }
   }
@@ -483,153 +615,153 @@ async function handleApi(req, res, requestUrl) {
       sendJson(res, 200, { user: sanitizeUser(user) });
       return true;
     } catch {
-      sendJson(res, 500, { error: 'Khong the tai thong tin tai khoan.' });
+      sendJson(res, 500, { error: 'Không thể tải thông tin tài khoản.' });
       return true;
     }
   }
 
   if (pathname === '/api/auth/logout' && req.method === 'POST') {
-    sendJson(res, 200, { message: 'Dang xuat thanh cong.' });
+    sendJson(res, 200, { message: 'Đăng xuất thành công.' });
     return true;
   }
 
-  if (pathname === '/api/records' && req.method === 'GET') {
+  if (pathname === '/api/attendance/calendar' && req.method === 'GET') {
     try {
       const db = await readDb();
-      const authUser = requireAuth(req, res, db);
+      const user = requireAuth(req, res, db);
 
-      if (!authUser) {
+      if (!user) {
         return true;
       }
 
-      const employeeId = normalizeEmployeeId(requestUrl.searchParams.get('employeeId'));
-      const date = String(requestUrl.searchParams.get('date') || '').trim();
+      const requestedMonth = normalizeMonthKey(requestUrl.searchParams.get('month'));
+      const month = requestedMonth || getTodayDateKey().slice(0, 7);
+      const days = buildCalendarDays(db, user, month);
 
-      let records = db.records.slice();
+      sendJson(res, 200, { month, days });
+      return true;
+    } catch {
+      sendJson(res, 500, { error: 'Không thể tải lịch chấm công.' });
+      return true;
+    }
+  }
 
-      if (authUser.role !== 'admin') {
-        records = records.filter((record) => record.employeeId === authUser.employeeId);
+  if (pathname === '/api/attendance' && req.method === 'GET') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+
+      if (!user) {
+        return true;
       }
 
-      if (employeeId) {
-        records = records.filter((record) => record.employeeId === employeeId);
+      const date = normalizeDateKey(requestUrl.searchParams.get('date'));
+
+      let records = db.attendance.slice();
+
+      if (user.role !== 'admin') {
+        records = records.filter((record) => record.usernameKey === user.usernameKey);
       }
 
       if (date) {
-        records = records.filter((record) => isSameLocalDay(record.timestamp, date));
+        records = records.filter((record) => record.date === date);
       }
 
-      records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      sendJson(res, 200, { records });
+      records.sort((a, b) => {
+        const timeDiff = new Date(b.timestamp) - new Date(a.timestamp);
+        if (timeDiff !== 0) {
+          return timeDiff;
+        }
+
+        return b.date.localeCompare(a.date);
+      });
+
+      sendJson(res, 200, { records: records.map(sanitizeAttendanceRecord) });
       return true;
     } catch {
-      sendJson(res, 500, { error: 'Khong the tai du lieu cham cong.' });
+      sendJson(res, 500, { error: 'Không thể tải danh sách chấm công.' });
       return true;
     }
   }
 
-  if (pathname === '/api/summary/today' && req.method === 'GET') {
+  if (pathname === '/api/attendance' && req.method === 'POST') {
     try {
       const db = await readDb();
-      const authUser = requireAuth(req, res, db);
+      const user = requireAuth(req, res, db);
 
-      if (!authUser) {
+      if (!user) {
         return true;
       }
 
-      let records = db.records.slice();
+      const body = await readRequestBody(req);
+      const date = normalizeDateKey(body.date);
 
-      if (authUser.role !== 'admin') {
-        records = records.filter((record) => record.employeeId === authUser.employeeId);
-      }
-
-      sendJson(res, 200, { summary: summarizeToday(records, db.employees) });
-      return true;
-    } catch {
-      sendJson(res, 500, { error: 'Khong the tai tong hop hom nay.' });
-      return true;
-    }
-  }
-
-  if (pathname === '/api/checkin' && req.method === 'POST') {
-    try {
-      const db = await readDb();
-      const authUser = requireAuth(req, res, db);
-
-      if (!authUser) {
+      if (!date) {
+        sendJson(res, 400, { error: 'Ngày chấm công không hợp lệ (YYYY-MM-DD).' });
         return true;
       }
 
-      const employeeId = authUser.employeeId;
-      const employeeName = authUser.fullName;
-      const lastAction = getLastEmployeeAction(db.records, employeeId);
+      const existing = getUserRecordForDate(db, user.usernameKey, date);
 
-      if (lastAction && lastAction.type === 'in') {
-        sendJson(res, 409, {
-          error: 'Ban dang o trang thai da check-in, chua check-out.'
-        });
-        return true;
-      }
-
-      db.employees[employeeId] = { name: employeeName };
-
-      const record = {
-        id: generateId(),
-        employeeId,
-        employeeName,
-        username: authUser.username,
-        type: 'in',
-        timestamp: new Date().toISOString(),
-        ip: getClientIp(req)
-      };
-
-      db.records.push(record);
-      await writeDb(db);
-
-      sendJson(res, 201, { message: 'Check-in thanh cong.', record });
-      return true;
-    } catch (error) {
-      sendJson(res, 500, { error: error.message || 'Khong the thuc hien check-in.' });
-      return true;
-    }
-  }
-
-  if (pathname === '/api/checkout' && req.method === 'POST') {
-    try {
-      const db = await readDb();
-      const authUser = requireAuth(req, res, db);
-
-      if (!authUser) {
-        return true;
-      }
-
-      const employeeId = authUser.employeeId;
-      const lastAction = getLastEmployeeAction(db.records, employeeId);
-
-      if (!lastAction || lastAction.type !== 'in') {
-        sendJson(res, 409, {
-          error: 'Ban chua check-in hoac da check-out roi.'
-        });
+      if (existing) {
+        sendJson(res, 409, { error: 'Ngày này đã được chấm công rồi.' });
         return true;
       }
 
       const record = {
         id: generateId(),
-        employeeId,
-        employeeName: authUser.fullName,
-        username: authUser.username,
-        type: 'out',
+        usernameKey: user.usernameKey,
+        username: user.username,
+        fullName: user.fullName,
+        date,
         timestamp: new Date().toISOString(),
         ip: getClientIp(req)
       };
 
-      db.records.push(record);
+      db.attendance.push(record);
       await writeDb(db);
 
-      sendJson(res, 201, { message: 'Check-out thanh cong.', record });
+      sendJson(res, 201, { message: 'Chấm công thành công.', record: sanitizeAttendanceRecord(record) });
       return true;
     } catch (error) {
-      sendJson(res, 500, { error: error.message || 'Khong the thuc hien check-out.' });
+      sendJson(res, 500, { error: error.message || 'Không thể chấm công.' });
+      return true;
+    }
+  }
+
+  const deleteMatch = pathname.match(/^\/api\/attendance\/([^/]+)$/);
+
+  if (deleteMatch && req.method === 'DELETE') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+
+      if (!user) {
+        return true;
+      }
+
+      const recordId = decodeURIComponent(deleteMatch[1]);
+      const index = db.attendance.findIndex((record) => record.id === recordId);
+
+      if (index < 0) {
+        sendJson(res, 404, { error: 'Không tìm thấy bản ghi chấm công.' });
+        return true;
+      }
+
+      const target = db.attendance[index];
+
+      if (user.role !== 'admin' && target.usernameKey !== user.usernameKey) {
+        sendJson(res, 403, { error: 'Bạn không có quyền xoá bản ghi này.' });
+        return true;
+      }
+
+      db.attendance.splice(index, 1);
+      await writeDb(db);
+
+      sendJson(res, 200, { message: 'Đã xoá chấm công.' });
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Không thể xoá chấm công.' });
       return true;
     }
   }
@@ -685,7 +817,7 @@ async function startServer() {
 
       await serveStatic(res, requestUrl.pathname);
     } catch {
-      sendJson(res, 500, { error: 'Loi he thong.' });
+      sendJson(res, 500, { error: 'Lỗi hệ thống.' });
     }
   });
 
