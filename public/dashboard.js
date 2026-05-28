@@ -14,6 +14,10 @@ let dayDataPermission = {
 };
 let fixedMembers = [];
 let canDeleteFixedMembers = false;
+let fixedStatsDates = [];
+const fixedStatsChargesByDate = new Map();
+let fixedStatsRequestId = 0;
+let fixedStatsMonthKey = currentMonthKey;
 
 const userLabelEl = document.getElementById('userLabel');
 const monthLabelEl = document.getElementById('monthLabel');
@@ -62,6 +66,17 @@ const fixedMemberBodyEl = document.getElementById('fixedMemberBody');
 const fixedMemberSummaryEl = document.getElementById('fixedMemberSummary');
 const fixedMemberSelectEl = document.getElementById('fixedMemberSelect');
 const deleteFixedMemberBtnEl = document.getElementById('deleteFixedMemberBtn');
+const fixedStatsDateInputEl = document.getElementById('fixedStatsDateInput');
+const addFixedStatsDateBtnEl = document.getElementById('addFixedStatsDateBtn');
+const clearFixedStatsDatesBtnEl = document.getElementById('clearFixedStatsDatesBtn');
+const fixedStatsDateListEl = document.getElementById('fixedStatsDateList');
+const fixedStatsSummaryEl = document.getElementById('fixedStatsSummary');
+const fixedStatsMonthLabelEl = document.getElementById('fixedStatsMonthLabel');
+const fixedStatsCalendarGridEl = document.getElementById('fixedStatsCalendarGrid');
+const prevFixedStatsMonthBtnEl = document.getElementById('prevFixedStatsMonthBtn');
+const nextFixedStatsMonthBtnEl = document.getElementById('nextFixedStatsMonthBtn');
+const selectFixedStatsMonthBtnEl = document.getElementById('selectFixedStatsMonthBtn');
+const clearFixedStatsMonthBtnEl = document.getElementById('clearFixedStatsMonthBtn');
 
 const gameState = {
   running: false,
@@ -112,6 +127,10 @@ function normalizeDateKey(value) {
   }
 
   return text;
+}
+
+function normalizeUsernameKey(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function setStatus(message, isError = false) {
@@ -167,6 +186,32 @@ function formatDateLabel(dateKey) {
 
 function formatDateTime(isoString) {
   return new Date(isoString).toLocaleString('vi-VN', { hour12: false });
+}
+
+function formatDateShort(dateKey) {
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
+function getDaysInMonth(monthKey) {
+  const [yearText, monthText] = monthKey.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const dayCount = new Date(year, month, 0).getDate();
+
+  return Array.from({ length: dayCount }, (_, index) => {
+    const day = index + 1;
+    return `${monthKey}-${String(day).padStart(2, '0')}`;
+  });
+}
+
+function shiftMonthKey(monthKey, step) {
+  const [yearText, monthText] = monthKey.split('-');
+  const date = new Date(Number(yearText), Number(monthText) - 1 + step, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 async function httpJson(url, options = {}) {
@@ -236,6 +281,9 @@ function updateCalendarActionButtons() {
 
 function syncDateInputsFromSelectedDate() {
   exportDateInputEl.value = selectedDate || '';
+  if (fixedStatsDateInputEl && !fixedStatsDateInputEl.value) {
+    fixedStatsDateInputEl.value = selectedDate || '';
+  }
 }
 
 function buildGuestRows(summary = {}, inputs = {}) {
@@ -484,7 +532,266 @@ function renderEditorList(editors, canManageEditors) {
   });
 }
 
-function renderFixedMembers(users, allowDelete) {
+function getFixedStatsTotals() {
+  const totals = new Map();
+
+  for (const item of fixedStatsDates) {
+    if (!item.enabled) {
+      continue;
+    }
+
+    const dayCharges = fixedStatsChargesByDate.get(item.date);
+    if (!dayCharges) {
+      continue;
+    }
+
+    for (const [usernameKey, amount] of dayCharges.entries()) {
+      totals.set(usernameKey, (totals.get(usernameKey) || 0) + Number(amount || 0));
+    }
+  }
+
+  return totals;
+}
+
+function updateFixedStatsSummary(totals) {
+  if (!fixedStatsSummaryEl) {
+    return;
+  }
+
+  const selectedCount = fixedStatsDates.filter((item) => item.enabled).length;
+  const totalCount = fixedStatsDates.length;
+  const totalAmount = Array.from(totals.values()).reduce((sum, value) => sum + Number(value || 0), 0);
+
+  if (!totalCount) {
+    fixedStatsSummaryEl.textContent = 'Chưa chọn ngày nào để thống kê.';
+    return;
+  }
+
+  fixedStatsSummaryEl.textContent = `Đang tích ${selectedCount}/${totalCount} ngày. Tổng phải trả của thành viên cố định: ${formatCurrency(
+    totalAmount
+  )} VNĐ.`;
+}
+
+function renderFixedStatsDateList() {
+  if (!fixedStatsDateListEl) {
+    return;
+  }
+
+  if (!fixedStatsDates.length) {
+    fixedStatsDateListEl.innerHTML = '<p class="muted">Chưa có ngày nào trong danh sách cộng tiền.</p>';
+    return;
+  }
+
+  fixedStatsDateListEl.innerHTML = fixedStatsDates
+    .map(
+      (item) => `
+      <div class="fixed-stats-date-item">
+        <label class="fixed-stats-date-check">
+          <input type="checkbox" data-fixed-stats-toggle="${escapeHtml(item.date)}" ${
+            item.enabled ? 'checked' : ''
+          } />
+          <span>${escapeHtml(formatDateShort(item.date))}</span>
+        </label>
+        <button class="btn ghost mini" type="button" data-fixed-stats-remove="${escapeHtml(item.date)}">Bỏ ngày</button>
+      </div>`
+    )
+    .join('');
+
+  Array.from(fixedStatsDateListEl.querySelectorAll('input[data-fixed-stats-toggle]')).forEach((input) => {
+    input.addEventListener('change', async () => {
+      const date = input.dataset.fixedStatsToggle || '';
+      const target = fixedStatsDates.find((item) => item.date === date);
+      if (!target) {
+        return;
+      }
+
+      target.enabled = input.checked;
+      renderFixedStatsCalendar();
+      await refreshFixedMemberStatistics();
+    });
+  });
+
+  Array.from(fixedStatsDateListEl.querySelectorAll('button[data-fixed-stats-remove]')).forEach((button) => {
+    button.addEventListener('click', async () => {
+      const date = button.dataset.fixedStatsRemove || '';
+      fixedStatsDates = fixedStatsDates.filter((item) => item.date !== date);
+      renderFixedStatsDateList();
+      renderFixedStatsCalendar();
+      await refreshFixedMemberStatistics();
+    });
+  });
+}
+
+function renderFixedStatsCalendar() {
+  if (!fixedStatsMonthLabelEl || !fixedStatsCalendarGridEl) {
+    return;
+  }
+
+  fixedStatsMonthLabelEl.textContent = formatMonthLabel(fixedStatsMonthKey);
+  fixedStatsCalendarGridEl.innerHTML = getDaysInMonth(fixedStatsMonthKey)
+    .map((date) => {
+      const dayNumber = Number(date.slice(-2));
+      const target = fixedStatsDates.find((item) => item.date === date);
+      const checked = Boolean(target?.enabled);
+
+      return `
+        <label class="fixed-stats-day ${checked ? 'checked' : ''}">
+          <input type="checkbox" data-fixed-stats-day="${escapeHtml(date)}" ${checked ? 'checked' : ''} />
+          <span>${dayNumber}</span>
+        </label>`;
+    })
+    .join('');
+
+  Array.from(fixedStatsCalendarGridEl.querySelectorAll('input[data-fixed-stats-day]')).forEach((input) => {
+    input.addEventListener('change', async () => {
+      const date = input.dataset.fixedStatsDay || '';
+      const existing = fixedStatsDates.find((item) => item.date === date);
+
+      if (existing) {
+        existing.enabled = input.checked;
+      } else {
+        fixedStatsDates.push({ date, enabled: input.checked });
+        fixedStatsDates = fixedStatsDates.sort((a, b) => a.date.localeCompare(b.date));
+      }
+
+      renderFixedStatsCalendar();
+      renderFixedStatsDateList();
+      await refreshFixedMemberStatistics();
+    });
+  });
+}
+
+async function refreshFixedMemberStatistics() {
+  const requestId = ++fixedStatsRequestId;
+  const activeDates = fixedStatsDates.filter((item) => item.enabled).map((item) => item.date);
+
+  try {
+    for (const date of activeDates) {
+      if (fixedStatsChargesByDate.has(date)) {
+        continue;
+      }
+
+      const data = await httpJson(`/api/attendance/day?date=${encodeURIComponent(date)}`);
+      const dayChargeMap = new Map();
+      const records = Array.isArray(data.records) ? data.records : [];
+
+      for (const record of records) {
+        const usernameKey = normalizeUsernameKey(record.username);
+        if (!usernameKey) {
+          continue;
+        }
+
+        dayChargeMap.set(usernameKey, (dayChargeMap.get(usernameKey) || 0) + Number(record.charge || 0));
+      }
+
+      fixedStatsChargesByDate.set(date, dayChargeMap);
+    }
+  } catch (error) {
+    if (requestId !== fixedStatsRequestId) {
+      return;
+    }
+
+    setStatus(`Không thể tải thống kê Tab 4: ${error.message}`, true);
+    return;
+  }
+
+  if (requestId !== fixedStatsRequestId) {
+    return;
+  }
+
+  const totals = getFixedStatsTotals();
+  renderFixedMembers(fixedMembers, canDeleteFixedMembers, totals);
+  updateFixedStatsSummary(totals);
+}
+
+function invalidateFixedStatsCache(date) {
+  if (date) {
+    fixedStatsChargesByDate.delete(date);
+    return;
+  }
+
+  fixedStatsChargesByDate.clear();
+}
+
+async function addFixedStatsDate() {
+  const date = normalizeDateKey((fixedStatsDateInputEl?.value || '').trim() || selectedDate);
+  if (!date) {
+    setStatus('Vui lòng chọn ngày hợp lệ để thống kê.', true);
+    return;
+  }
+
+  const existing = fixedStatsDates.find((item) => item.date === date);
+  if (existing) {
+    existing.enabled = true;
+    renderFixedStatsDateList();
+    renderFixedStatsCalendar();
+    await refreshFixedMemberStatistics();
+    setStatus(`Ngày ${formatDateShort(date)} đã có trong danh sách thống kê.`);
+    return;
+  }
+
+  fixedStatsDates.push({ date, enabled: true });
+  fixedStatsDates = fixedStatsDates.sort((a, b) => a.date.localeCompare(b.date));
+  renderFixedStatsDateList();
+  renderFixedStatsCalendar();
+  await refreshFixedMemberStatistics();
+  setStatus(`Đã thêm ngày ${formatDateShort(date)} vào thống kê Tab 4.`);
+}
+
+async function clearFixedStatsDates() {
+  if (!fixedStatsDates.length) {
+    return;
+  }
+
+  fixedStatsDates = [];
+  renderFixedStatsDateList();
+  renderFixedStatsCalendar();
+  await refreshFixedMemberStatistics();
+  setStatus('Đã xoá danh sách ngày thống kê Tab 4.');
+}
+
+async function selectFixedStatsMonth() {
+  const days = getDaysInMonth(fixedStatsMonthKey);
+
+  for (const date of days) {
+    const existing = fixedStatsDates.find((item) => item.date === date);
+    if (existing) {
+      existing.enabled = true;
+    } else {
+      fixedStatsDates.push({ date, enabled: true });
+    }
+  }
+
+  fixedStatsDates = fixedStatsDates.sort((a, b) => a.date.localeCompare(b.date));
+  renderFixedStatsCalendar();
+  renderFixedStatsDateList();
+  await refreshFixedMemberStatistics();
+  setStatus(`Đã tích toàn bộ ${formatMonthLabel(fixedStatsMonthKey)}.`);
+}
+
+async function clearFixedStatsMonth() {
+  const monthPrefix = `${fixedStatsMonthKey}-`;
+  let changed = false;
+
+  for (const item of fixedStatsDates) {
+    if (item.date.startsWith(monthPrefix) && item.enabled) {
+      item.enabled = false;
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    setStatus(`Không có ngày nào đang tích trong ${formatMonthLabel(fixedStatsMonthKey)}.`);
+    return;
+  }
+
+  renderFixedStatsCalendar();
+  renderFixedStatsDateList();
+  await refreshFixedMemberStatistics();
+  setStatus(`Đã bỏ tích ${formatMonthLabel(fixedStatsMonthKey)}.`);
+}
+
+function renderFixedMembers(users, allowDelete, chargeTotals = new Map()) {
   const sortedUsers = [...users].sort((a, b) =>
     String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi', { sensitivity: 'base' })
   );
@@ -510,20 +817,24 @@ function renderFixedMembers(users, allowDelete) {
   deleteFixedMemberBtnEl.disabled = !allowDelete || !deletableUsers.length;
 
   if (!sortedUsers.length) {
-    fixedMemberBodyEl.innerHTML = '<tr><td colspan="5">Chưa có thành viên cố định nào.</td></tr>';
+    fixedMemberBodyEl.innerHTML = '<tr><td colspan="6">Chưa có thành viên cố định nào.</td></tr>';
     return;
   }
 
   fixedMemberBodyEl.innerHTML = sortedUsers
     .map(
-      (item, index) => `
+      (item, index) => {
+        const charge = Number(chargeTotals.get(normalizeUsernameKey(item.username)) || 0);
+        return `
       <tr>
         <td>${index + 1}</td>
         <td>${escapeHtml(item.fullName)}</td>
         <td>${escapeHtml(item.username)}</td>
         <td>${item.gender === 'female' ? 'Nữ' : 'Nam'}</td>
         <td>${item.role === 'admin' ? 'Admin' : 'Thành viên'}</td>
-      </tr>`
+        <td>${formatCurrency(charge)} VNĐ</td>
+      </tr>`;
+      }
     )
     .join('');
 }
@@ -535,7 +846,10 @@ async function loadEditorData() {
 
   fixedMembers = Array.isArray(data.users) ? data.users : [];
   canDeleteFixedMembers = Boolean(data.canDeleteMembers);
-  renderFixedMembers(fixedMembers, canDeleteFixedMembers);
+  renderFixedMembers(fixedMembers, canDeleteFixedMembers, getFixedStatsTotals());
+  renderFixedStatsCalendar();
+  renderFixedStatsDateList();
+  await refreshFixedMemberStatistics();
 }
 
 async function addEditor() {
@@ -594,6 +908,7 @@ async function deleteFixedMember(username) {
       method: 'DELETE'
     });
 
+    invalidateFixedStatsCache();
     setStatus(`Đã xoá thành viên cố định ${targetUsername}.`);
     await refreshAll();
     await loadLeaderboard();
@@ -631,9 +946,11 @@ async function markAttendance() {
       body: JSON.stringify({ date: selectedDate })
     });
 
+    invalidateFixedStatsCache(selectedDate);
     setStatus(`Đã chấm công ngày ${formatDateLabel(selectedDate)}.`);
     await loadCalendar(currentMonthKey);
     await refreshSelectedDateData();
+    await refreshFixedMemberStatistics();
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -654,9 +971,11 @@ async function deleteAttendanceById(recordId) {
       method: 'DELETE'
     });
 
+    invalidateFixedStatsCache(selectedDate);
     setStatus('Đã xóa chấm công thành công.');
     await loadCalendar(currentMonthKey);
     await refreshSelectedDateData();
+    await refreshFixedMemberStatistics();
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -726,8 +1045,10 @@ async function calculateDayData() {
       })
     });
 
+    invalidateFixedStatsCache(selectedDate);
     setStatus('Đã tính và lưu dữ liệu ngày thành công.');
     await refreshSelectedDateData();
+    await refreshFixedMemberStatistics();
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -1098,6 +1419,39 @@ function setupEvents() {
   copyDayDataBtnEl.addEventListener('click', copyDayDataFromSource);
   addEditorBtnEl.addEventListener('click', addEditor);
   deleteFixedMemberBtnEl.addEventListener('click', () => deleteFixedMember());
+  if (addFixedStatsDateBtnEl) {
+    addFixedStatsDateBtnEl.addEventListener('click', addFixedStatsDate);
+  }
+  if (clearFixedStatsDatesBtnEl) {
+    clearFixedStatsDatesBtnEl.addEventListener('click', clearFixedStatsDates);
+  }
+  if (prevFixedStatsMonthBtnEl) {
+    prevFixedStatsMonthBtnEl.addEventListener('click', () => {
+      fixedStatsMonthKey = shiftMonthKey(fixedStatsMonthKey, -1);
+      renderFixedStatsCalendar();
+    });
+  }
+  if (nextFixedStatsMonthBtnEl) {
+    nextFixedStatsMonthBtnEl.addEventListener('click', () => {
+      fixedStatsMonthKey = shiftMonthKey(fixedStatsMonthKey, 1);
+      renderFixedStatsCalendar();
+    });
+  }
+  if (selectFixedStatsMonthBtnEl) {
+    selectFixedStatsMonthBtnEl.addEventListener('click', selectFixedStatsMonth);
+  }
+  if (clearFixedStatsMonthBtnEl) {
+    clearFixedStatsMonthBtnEl.addEventListener('click', clearFixedStatsMonth);
+  }
+  if (fixedStatsDateInputEl) {
+    fixedStatsDateInputEl.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter') {
+        return;
+      }
+      event.preventDefault();
+      await addFixedStatsDate();
+    });
+  }
 
   document.getElementById('refreshBtn').addEventListener('click', async () => {
     await refreshAll();

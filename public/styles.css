@@ -359,6 +359,70 @@ thead th {
   font-weight: 600;
 }
 
+.fixed-stats-toolbar {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fixed-stats-calendar-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 8px;
+}
+
+.fixed-stats-day {
+  min-height: 46px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbff;
+  cursor: pointer;
+}
+
+.fixed-stats-day.checked {
+  border-color: #16a34a;
+  background: #dcfce7;
+}
+
+.fixed-stats-day input {
+  margin: 0;
+}
+
+.fixed-stats-date-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.fixed-stats-date-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 8px 10px;
+}
+
+.fixed-stats-date-check {
+  margin: 0;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
 #fixedMembersPanel table {
   min-width: 620px;
 }

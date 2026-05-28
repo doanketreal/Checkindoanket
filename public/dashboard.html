@@ -245,6 +245,28 @@
             <p id="fixedMemberSummary" class="muted"></p>
           </div>
 
+          <section class="mini-card">
+            <h3>Thống kê tiền theo ngày đã tích</h3>
+            <div class="fixed-stats-toolbar">
+              <button id="prevFixedStatsMonthBtn" class="btn ghost" type="button">Tháng trước</button>
+              <strong id="fixedStatsMonthLabel"></strong>
+              <button id="nextFixedStatsMonthBtn" class="btn ghost" type="button">Tháng sau</button>
+            </div>
+            <div id="fixedStatsCalendarGrid" class="fixed-stats-calendar-grid"></div>
+            <div class="actions">
+              <button id="selectFixedStatsMonthBtn" class="btn primary" type="button">Tích cả tháng</button>
+              <button id="clearFixedStatsMonthBtn" class="btn ghost" type="button">Bỏ tích tháng này</button>
+              <label class="inline-field">
+                Thêm ngày cụ thể
+                <input id="fixedStatsDateInput" type="date" />
+              </label>
+              <button id="addFixedStatsDateBtn" class="btn ghost">Thêm ngày</button>
+              <button id="clearFixedStatsDatesBtn" class="btn ghost">Xoá danh sách ngày</button>
+            </div>
+            <div id="fixedStatsDateList" class="fixed-stats-date-list"></div>
+            <p id="fixedStatsSummary" class="muted top-gap">Chưa chọn ngày nào để thống kê.</p>
+          </section>
+
           <div class="actions">
             <label class="inline-field">
               Chọn thành viên cần xoá
@@ -262,6 +284,7 @@
                   <th>Username</th>
                   <th>Giới tính</th>
                   <th>Vai trò</th>
+                  <th>Phải trả (ngày đã tích)</th>
                 </tr>
               </thead>
               <tbody id="fixedMemberBody"></tbody>
