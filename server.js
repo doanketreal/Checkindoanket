@@ -157,7 +157,7 @@ function roundMoney(value) {
     return 0;
   }
 
-  return Math.round(value * 100) / 100;
+  return Math.ceil(value);
 }
 
 function safeNumber(value) {
@@ -979,6 +979,44 @@ function requireAdmin(user, res) {
   return false;
 }
 
+function removeUserFromAllData(db, usernameKey) {
+  delete db.users[usernameKey];
+  db.dataEditors = db.dataEditors.filter((item) => item !== usernameKey);
+  db.attendance = db.attendance.filter((record) => record.usernameKey !== usernameKey);
+  db.gameScores = db.gameScores.filter((record) => record.usernameKey !== usernameKey);
+
+  for (const [dateKey, config] of Object.entries(db.dayConfigs)) {
+    if (!config || typeof config !== 'object') {
+      continue;
+    }
+
+    const sanitized = sanitizeDayConfig(config);
+    const records = getAttendanceForDate(db, dateKey);
+    try {
+      const computed = calculateDayFinancials(sanitized.inputs, sanitized.formulas, records);
+
+      config.inputs = computed.inputs;
+      config.formulas = computed.formulas;
+      config.charges = computed.charges;
+      config.summary = computed.summary;
+    } catch {
+      const counts = getGenderCounts(records);
+      config.inputs = sanitized.inputs;
+      config.formulas = sanitized.formulas;
+      config.charges = {};
+      config.summary = {
+        NCD: counts.NCD,
+        NuCD: counts.NuCD,
+        maleFixedAmount: 0,
+        femaleFixedAmount: 0,
+        maleGuestAmount: 0,
+        femaleGuestAmount: 0,
+        totalRevenue: 0
+      };
+    }
+  }
+}
+
 async function handleApi(req, res, requestUrl) {
   const pathname = requestUrl.pathname;
 
@@ -1411,6 +1449,7 @@ async function handleApi(req, res, requestUrl) {
       sendJson(res, 200, {
         canManageEditors: user.role === 'admin',
         hasInputPermission: hasDataInputPermission(user, db),
+        canDeleteMembers: hasDataInputPermission(user, db),
         editors,
         users
       });
@@ -1495,6 +1534,53 @@ async function handleApi(req, res, requestUrl) {
       return true;
     } catch (error) {
       sendJson(res, 500, { error: error.message || 'Không thể xoá quyền.' });
+      return true;
+    }
+  }
+
+  const deleteFixedMemberMatch = pathname.match(/^\/api\/fixed-members\/([^/]+)$/);
+  if (deleteFixedMemberMatch && req.method === 'DELETE') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+      if (!user) {
+        return true;
+      }
+
+      if (!hasDataInputPermission(user, db)) {
+        sendJson(res, 403, { error: 'Báº¡n khÃ´ng cÃ³ quyá»n xoÃ¡ thÃ nh viÃªn cá»‘ Ä‘á»‹nh.' });
+        return true;
+      }
+
+      const targetKey = usernameKeyFromInput(decodeURIComponent(deleteFixedMemberMatch[1]));
+      if (!targetKey) {
+        sendJson(res, 400, { error: 'Username khÃ´ng há»£p lá»‡.' });
+        return true;
+      }
+
+      const targetUser = db.users[targetKey];
+      if (!targetUser) {
+        sendJson(res, 404, { error: 'KhÃ´ng tÃ¬m tháº¥y thÃ nh viÃªn cá»‘ Ä‘á»‹nh nÃ y.' });
+        return true;
+      }
+
+      if (targetKey === user.usernameKey) {
+        sendJson(res, 409, { error: 'KhÃ´ng thá»ƒ tá»± xoÃ¡ chÃ­nh tÃ i khoáº£n Ä‘ang Ä‘Äƒng nháº­p.' });
+        return true;
+      }
+
+      if (targetUser.role === 'admin' && user.role !== 'admin') {
+        sendJson(res, 403, { error: 'Chá»‰ admin má»›i Ä‘Æ°á»£c xoÃ¡ tÃ i khoáº£n admin.' });
+        return true;
+      }
+
+      removeUserFromAllData(db, targetKey);
+      await writeDb(db);
+
+      sendJson(res, 200, { message: `ÄÃ£ xoÃ¡ thÃ nh viÃªn cá»‘ Ä‘á»‹nh ${targetUser.username}.` });
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'KhÃ´ng thá»ƒ xoÃ¡ thÃ nh viÃªn cá»‘ Ä‘á»‹nh.' });
       return true;
     }
   }
@@ -1634,3 +1720,4 @@ async function startServer() {
 }
 
 startServer();
+

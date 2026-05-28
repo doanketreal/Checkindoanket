@@ -343,6 +343,8 @@ thead th {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #f8fcff;
+  touch-action: none;
+  cursor: pointer;
 }
 
 .game-meta {
