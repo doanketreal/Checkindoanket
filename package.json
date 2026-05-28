@@ -1,0 +1,16 @@
+﻿{
+  "name": "noip-attendance-app",
+  "version": "1.0.0",
+  "description": "Web app cham cong don gian truy cap qua No-IP",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "attendance",
+    "no-ip",
+    "timekeeping"
+  ],
+  "author": "",
+  "license": "MIT"
+}
