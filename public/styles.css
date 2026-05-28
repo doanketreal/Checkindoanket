@@ -115,6 +115,10 @@ label {
   font-weight: 600;
 }
 
+.inline-field {
+  min-width: 220px;
+}
+
 input,
 select {
   border: 1px solid var(--line);

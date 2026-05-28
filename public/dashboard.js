@@ -24,6 +24,8 @@ const markAttendanceBtnEl = document.getElementById('markAttendanceBtn');
 const deleteAttendanceBtnEl = document.getElementById('deleteAttendanceBtn');
 const toggleQrBtnEl = document.getElementById('toggleQrBtn');
 const qrWrapEl = document.getElementById('qrWrap');
+const exportDateInputEl = document.getElementById('exportDateInput');
+const exportExcelBtnEl = document.getElementById('exportExcelBtn');
 
 const editorManageCardEl = document.getElementById('editorManageCard');
 const dataPermissionLabelEl = document.getElementById('dataPermissionLabel');
@@ -31,6 +33,8 @@ const editorUsernameInputEl = document.getElementById('editorUsernameInput');
 const editorListBodyEl = document.getElementById('editorListBody');
 const addEditorBtnEl = document.getElementById('addEditorBtn');
 const calculateDayBtnEl = document.getElementById('calculateDayBtn');
+const copySourceDateInputEl = document.getElementById('copySourceDateInput');
+const copyDayDataBtnEl = document.getElementById('copyDayDataBtn');
 
 const inputFieldIds = ['SC', 'TC', 'SS', 'TS', 'SB', 'TB', 'SG', 'TG'];
 const formulaFieldIds = ['MaleFixed', 'FemaleFixed', 'MaleGuest', 'FemaleGuest'];
@@ -85,6 +89,37 @@ function getTodayDateKey() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
     now.getDate()
   ).padStart(2, '0')}`;
+}
+
+function normalizeDateKey(value) {
+  const text = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return '';
+  }
+
+  const [yearText, monthText, dayText] = text.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const check = new Date(year, month - 1, day);
+
+  if (
+    check.getFullYear() !== year ||
+    check.getMonth() !== month - 1 ||
+    check.getDate() !== day
+  ) {
+    return '';
+  }
+
+  return text;
+}
+
+function escapeCsvCell(value) {
+  const cell = String(value ?? '');
+  if (/[",\r\n]/.test(cell)) {
+    return `"${cell.replace(/"/g, '""')}"`;
+  }
+  return cell;
 }
 
 function setStatus(message, isError = false) {
@@ -178,6 +213,16 @@ function switchTab(name) {
   document.getElementById('dataPanel').classList.toggle('active', isData);
   document.getElementById('gamePanel').classList.toggle('active', isGame);
   document.getElementById('fixedMembersPanel').classList.toggle('active', isFixedMembers);
+
+  if (isCalendar) {
+    setStatus('Sẵn sàng chấm công theo lịch.');
+  } else if (isData) {
+    setStatus('Sẵn sàng nhập dữ liệu ngày đã chọn.');
+  } else if (isGame) {
+    setStatus('Tab 3: Game cầu lông.');
+  } else if (isFixedMembers) {
+    setStatus('Tab 4: Danh sách thành viên cố định.');
+  }
 }
 
 function getSelectedDayInfo() {
@@ -190,6 +235,12 @@ function updateCalendarActionButtons() {
 
   markAttendanceBtnEl.disabled = !hasSelection || selected.checked;
   deleteAttendanceBtnEl.disabled = !hasSelection || !selected.checked;
+}
+
+function syncDateInputsFromSelectedDate() {
+  if (exportDateInputEl) {
+    exportDateInputEl.value = selectedDate || '';
+  }
 }
 
 function renderCalendar() {
@@ -221,6 +272,7 @@ function renderCalendar() {
   Array.from(calendarGridEl.querySelectorAll('button[data-date]')).forEach((button) => {
     button.addEventListener('click', async () => {
       selectedDate = button.dataset.date || '';
+      syncDateInputsFromSelectedDate();
       renderCalendar();
       await refreshSelectedDateData();
       setStatus(`Đã chọn ${formatDateLabel(selectedDate)}.`);
@@ -285,6 +337,8 @@ function setDataFormDisabled(disabled) {
   }
 
   calculateDayBtnEl.disabled = disabled;
+  copySourceDateInputEl.disabled = disabled;
+  copyDayDataBtnEl.disabled = disabled;
 }
 
 async function loadCurrentUser() {
@@ -306,7 +360,7 @@ async function loadCalendar(monthKey = currentMonthKey) {
       ? today
       : calendarDays[0]?.date || '';
   }
-
+  syncDateInputsFromSelectedDate();
   renderCalendar();
 }
 
@@ -333,6 +387,10 @@ async function loadDayData() {
     return;
   }
 
+  if (!copySourceDateInputEl.value) {
+    copySourceDateInputEl.value = selectedDate;
+  }
+
   const data = await httpJson(`/api/day-data?date=${encodeURIComponent(selectedDate)}`);
 
   dayDataPermission = {
@@ -345,20 +403,7 @@ async function loadDayData() {
     : 'Bạn không có quyền nhập dữ liệu. Chỉ Admin hoặc người được Admin cấp quyền mới nhập được.';
 
   setDataFormDisabled(!dayDataPermission.hasInputPermission);
-
-  document.getElementById('inputSC').value = data.inputs.SC ?? 0;
-  document.getElementById('inputTC').value = data.inputs.TC ?? 0;
-  document.getElementById('inputSS').value = data.inputs.SS ?? 0;
-  document.getElementById('inputTS').value = data.inputs.TS ?? 0;
-  document.getElementById('inputSB').value = data.inputs.SB ?? 0;
-  document.getElementById('inputTB').value = data.inputs.TB ?? 0;
-  document.getElementById('inputSG').value = data.inputs.SG ?? 0;
-  document.getElementById('inputTG').value = data.inputs.TG ?? 0;
-
-  document.getElementById('formulaMaleFixed').value = data.formulas.maleFixed ?? '0';
-  document.getElementById('formulaFemaleFixed').value = data.formulas.femaleFixed ?? '0';
-  document.getElementById('formulaMaleGuest').value = data.formulas.maleGuest ?? '0';
-  document.getElementById('formulaFemaleGuest').value = data.formulas.femaleGuest ?? '0';
+  applyInputsAndFormulasToForm(data.inputs || {}, data.formulas || {});
 
   countNCDEl.value = data.summary.NCD ?? 0;
   countNuCDEl.value = data.summary.NuCD ?? 0;
@@ -568,6 +613,22 @@ function getDayFormulasFromForm() {
   };
 }
 
+function applyInputsAndFormulasToForm(inputs, formulas) {
+  document.getElementById('inputSC').value = inputs.SC ?? 0;
+  document.getElementById('inputTC').value = inputs.TC ?? 0;
+  document.getElementById('inputSS').value = inputs.SS ?? 0;
+  document.getElementById('inputTS').value = inputs.TS ?? 0;
+  document.getElementById('inputSB').value = inputs.SB ?? 0;
+  document.getElementById('inputTB').value = inputs.TB ?? 0;
+  document.getElementById('inputSG').value = inputs.SG ?? 0;
+  document.getElementById('inputTG').value = inputs.TG ?? 0;
+
+  document.getElementById('formulaMaleFixed').value = formulas.maleFixed ?? '0';
+  document.getElementById('formulaFemaleFixed').value = formulas.femaleFixed ?? '0';
+  document.getElementById('formulaMaleGuest').value = formulas.maleGuest ?? '0';
+  document.getElementById('formulaFemaleGuest').value = formulas.femaleGuest ?? '0';
+}
+
 async function calculateDayData() {
   if (!selectedDate) {
     setStatus('Vui lòng chọn ngày trước khi tính.', true);
@@ -588,6 +649,84 @@ async function calculateDayData() {
     await refreshSelectedDateData();
   } catch (error) {
     setStatus(error.message, true);
+  }
+}
+
+async function copyDayDataFromSource() {
+  if (!dayDataPermission.hasInputPermission) {
+    setStatus('Bạn không có quyền sao chép dữ liệu ngày.', true);
+    return;
+  }
+
+  if (!selectedDate) {
+    setStatus('Vui lòng chọn ngày đích trước khi sao chép.', true);
+    return;
+  }
+
+  const sourceDate = normalizeDateKey(copySourceDateInputEl.value);
+
+  if (!sourceDate) {
+    setStatus('Vui lòng chọn ngày nguồn hợp lệ.', true);
+    return;
+  }
+
+  try {
+    const data = await httpJson(`/api/day-data?date=${encodeURIComponent(sourceDate)}`);
+    applyInputsAndFormulasToForm(data.inputs || {}, data.formulas || {});
+    setStatus(
+      `Đã sao chép dữ liệu từ ${formatDateLabel(sourceDate)}. Bấm "Tính và lưu" để áp dụng cho ngày đang chọn.`
+    );
+  } catch (error) {
+    setStatus(`Không thể sao chép dữ liệu: ${error.message}`, true);
+  }
+}
+
+async function exportAttendanceExcel() {
+  const date = normalizeDateKey(exportDateInputEl.value) || selectedDate;
+
+  if (!date) {
+    setStatus('Vui lòng chọn ngày để xuất Excel.', true);
+    return;
+  }
+
+  try {
+    const data = await httpJson(`/api/attendance/day?date=${encodeURIComponent(date)}`);
+    const records = Array.isArray(data.records) ? data.records : [];
+    const summary = data.summary || {};
+    const rows = [];
+
+    rows.push(['Ngày', date]);
+    rows.push([]);
+    rows.push(['STT', 'Họ tên', 'Username', 'Giới tính', 'Thời gian chấm', 'Phải trả (VNĐ)']);
+
+    records.forEach((record, index) => {
+      rows.push([
+        index + 1,
+        record.fullName || '',
+        record.username || '',
+        record.gender === 'female' ? 'Nữ' : 'Nam',
+        record.timestamp ? formatDateTime(record.timestamp) : '',
+        Number(record.charge || 0)
+      ]);
+    });
+
+    rows.push([]);
+    rows.push(['Tổng thu ngày (VNĐ)', Number(summary.totalRevenue || 0)]);
+
+    const csv = `\ufeff${rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n')}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `cham-cong-${date}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    setStatus(`Đã xuất Excel cho ngày ${formatDateLabel(date)}.`);
+  } catch (error) {
+    setStatus(`Không thể xuất Excel: ${error.message}`, true);
   }
 }
 
@@ -860,8 +999,10 @@ function setupEvents() {
   markAttendanceBtnEl.addEventListener('click', markAttendance);
   deleteAttendanceBtnEl.addEventListener('click', deleteSelectedDateAttendance);
   toggleQrBtnEl.addEventListener('click', toggleQr);
+  exportExcelBtnEl.addEventListener('click', exportAttendanceExcel);
 
   calculateDayBtnEl.addEventListener('click', calculateDayData);
+  copyDayDataBtnEl.addEventListener('click', copyDayDataFromSource);
   addEditorBtnEl.addEventListener('click', addEditor);
 
   document.getElementById('refreshBtn').addEventListener('click', async () => {
@@ -902,3 +1043,5 @@ async function init() {
 }
 
 init();
+
+

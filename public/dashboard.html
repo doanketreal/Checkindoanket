@@ -42,6 +42,14 @@
             <button id="toggleQrBtn" class="btn ghost">Hiện mã QR</button>
           </div>
 
+          <div class="actions">
+            <label class="inline-field">
+              Ngày xuất Excel
+              <input id="exportDateInput" type="date" />
+            </label>
+            <button id="exportExcelBtn" class="btn primary">Xuất Excel</button>
+          </div>
+
           <div id="qrWrap" class="qr-wrap hidden">
             <img src="/qr.jpg" alt="Mã QR" class="qr-image" />
           </div>
@@ -95,6 +103,20 @@
                 <tbody id="editorListBody"></tbody>
               </table>
             </div>
+          </section>
+
+          <section class="mini-card">
+            <h3>Sao chép dữ liệu từ ngày khác</h3>
+            <div class="actions">
+              <label class="inline-field">
+                Chọn ngày nguồn
+                <input id="copySourceDateInput" type="date" />
+              </label>
+              <button id="copyDayDataBtn" class="btn ghost">Sao chép vào ngày đang chọn</button>
+            </div>
+            <p class="hint">
+              Sao chép nhanh các biến đầu vào và công thức của ngày nguồn, sau đó bấm "Tính và lưu".
+            </p>
           </section>
 
           <section class="mini-card">

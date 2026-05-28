@@ -11,6 +11,7 @@ Web chấm công có 4 tab chính sau khi đăng nhập:
 - Hiển thị số tiền phải trả bên cạnh từng người (sau khi tính ở Tab 2).
 - Hiển thị tổng thu trong ngày.
 - Có nút hiện mã QR (`public/qr.jpg`).
+- Có thể chọn ngày và xuất file Excel (`.csv`) cho ngày đó.
 
 ## Tab 2: Data nhập
 
@@ -26,6 +27,7 @@ Web chấm công có 4 tab chính sau khi đăng nhập:
 - Công thức hỗ trợ `+ - * /` và biến (ví dụ `SC`, `TG`, `NCD`, `NuCD`, hoặc `'TG'`).
 - `NCD` và `NuCD` tự tính từ danh sách chấm công theo giới tính.
 - Bấm `Tính và lưu` để ghi tiền phải trả cho từng người trong Tab 1.
+- Có nút sao chép nhanh biến/công thức từ ngày khác vào ngày đang chọn.
 
 ## Tab 3: Game cầu lông
 
