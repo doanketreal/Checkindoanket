@@ -1,4 +1,4 @@
-﻿const TOKEN_STORAGE_KEY = 'attendance_auth_token';
+const TOKEN_STORAGE_KEY = 'attendance_auth_token';
 
 let authToken = localStorage.getItem(TOKEN_STORAGE_KEY) || '';
 let currentUser = null;
@@ -7,10 +7,7 @@ let selectedDate = '';
 let calendarDays = [];
 let selectedDayRecords = [];
 let selectedDaySummary = null;
-let selectedDayInputs = {
-  SB: 0,
-  SG: 0
-};
+let selectedDayInputs = { SB: 0, SG: 0 };
 let dayDataPermission = {
   hasInputPermission: false,
   canManageEditors: false
@@ -60,8 +57,11 @@ const gameScoreEl = document.getElementById('gameScore');
 const gameTimeEl = document.getElementById('gameTime');
 const gameLevelEl = document.getElementById('gameLevel');
 const leaderboardBodyEl = document.getElementById('leaderboardBody');
+
 const fixedMemberBodyEl = document.getElementById('fixedMemberBody');
 const fixedMemberSummaryEl = document.getElementById('fixedMemberSummary');
+const fixedMemberSelectEl = document.getElementById('fixedMemberSelect');
+const deleteFixedMemberBtnEl = document.getElementById('deleteFixedMemberBtn');
 
 const gameState = {
   running: false,
@@ -114,14 +114,6 @@ function normalizeDateKey(value) {
   return text;
 }
 
-function escapeCsvCell(value) {
-  const cell = String(value ?? '');
-  if (/[",\r\n]/.test(cell)) {
-    return `"${cell.replace(/"/g, '""')}"`;
-  }
-  return cell;
-}
-
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.style.color = isError ? '#b91c1c' : '#1d4ed8';
@@ -146,14 +138,21 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function escapeCsvCell(value) {
+  const cell = String(value ?? '');
+  if (/[",\r\n]/.test(cell)) {
+    return `"${cell.replace(/"/g, '""')}"`;
+  }
+  return cell;
+}
+
 function formatCurrency(value) {
-  const number = Number(value || 0);
-  return number.toLocaleString('vi-VN');
+  return Number(value || 0).toLocaleString('vi-VN');
 }
 
 function formatMonthLabel(monthKey) {
   const [yearText, monthText] = monthKey.split('-');
-  return `ThÃƒÂ¡ng ${Number(monthText)} nÃ„Æ’m ${yearText}`;
+  return `Tháng ${Number(monthText)} năm ${yearText}`;
 }
 
 function formatDateLabel(dateKey) {
@@ -167,9 +166,7 @@ function formatDateLabel(dateKey) {
 }
 
 function formatDateTime(isoString) {
-  return new Date(isoString).toLocaleString('vi-VN', {
-    hour12: false
-  });
+  return new Date(isoString).toLocaleString('vi-VN', { hour12: false });
 }
 
 async function httpJson(url, options = {}) {
@@ -190,7 +187,7 @@ async function httpJson(url, options = {}) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const error = new Error(payload.error || 'YÃƒÂªu cÃ¡ÂºÂ§u thÃ¡ÂºÂ¥t bÃ¡ÂºÂ¡i.');
+    const error = new Error(payload.error || 'Yêu cầu thất bại.');
     error.status = response.status;
     throw error;
   }
@@ -215,13 +212,13 @@ function switchTab(name) {
   document.getElementById('fixedMembersPanel').classList.toggle('active', isFixedMembers);
 
   if (isCalendar) {
-    setStatus('San sang cham cong theo lich.');
+    setStatus('Sẵn sàng chấm công theo lịch.');
   } else if (isData) {
-    setStatus('San sang nhap du lieu ngay da chon.');
+    setStatus('Sẵn sàng nhập dữ liệu ngày đã chọn.');
   } else if (isGame) {
-    setStatus('Tab 3: Game cau long.');
+    setStatus('Tab 3: Game cầu lông.');
   } else if (isFixedMembers) {
-    setStatus('Tab 4: Danh sach thanh vien co dinh.');
+    setStatus('Tab 4: Danh sách thành viên cố định.');
   }
 }
 
@@ -238,9 +235,7 @@ function updateCalendarActionButtons() {
 }
 
 function syncDateInputsFromSelectedDate() {
-  if (exportDateInputEl) {
-    exportDateInputEl.value = selectedDate || '';
-  }
+  exportDateInputEl.value = selectedDate || '';
 }
 
 function buildGuestRows(summary = {}, inputs = {}) {
@@ -254,7 +249,7 @@ function buildGuestRows(summary = {}, inputs = {}) {
   if (maleGuestCount > 0 || maleGuestAmount > 0) {
     rows.push({
       id: `guest-male-${selectedDate || 'none'}`,
-      fullName: 'Nam giao l\u01b0u',
+      fullName: 'Nam giao lưu',
       username: '-',
       gender: 'male',
       timestamp: '',
@@ -266,7 +261,7 @@ function buildGuestRows(summary = {}, inputs = {}) {
   if (femaleGuestCount > 0 || femaleGuestAmount > 0) {
     rows.push({
       id: `guest-female-${selectedDate || 'none'}`,
-      fullName: 'N\u1eef giao l\u01b0u',
+      fullName: 'Nữ giao lưu',
       username: '-',
       gender: 'female',
       timestamp: '',
@@ -282,7 +277,7 @@ function renderCalendar() {
   monthLabelEl.textContent = formatMonthLabel(currentMonthKey);
 
   if (!calendarDays.length) {
-    calendarGridEl.innerHTML = '<p>KhÃƒÂ´ng cÃƒÂ³ dÃ¡Â»Â¯ liÃ¡Â»â€¡u lÃ¡Â»â€¹ch.</p>';
+    calendarGridEl.innerHTML = '<p>Không có dữ liệu lịch.</p>';
     updateCalendarActionButtons();
     return;
   }
@@ -298,7 +293,7 @@ function renderCalendar() {
       return `
         <button class="${className}" data-date="${day.date}" type="button">
           <span class="day-number">${dayNum}</span>
-          <span class="day-text">${day.checked ? 'BÃ¡ÂºÂ¡n Ã„â€˜ÃƒÂ£ chÃ¡ÂºÂ¥m' : 'BÃ¡ÂºÂ¡n chÃ†Â°a chÃ¡ÂºÂ¥m'}</span>
+          <span class="day-text">${day.checked ? 'Bạn đã chấm' : 'Bạn chưa chấm'}</span>
         </button>
       `;
     })
@@ -310,7 +305,7 @@ function renderCalendar() {
       syncDateInputsFromSelectedDate();
       renderCalendar();
       await refreshSelectedDateData();
-      setStatus(`Ã„ÂÃƒÂ£ chÃ¡Â»Ân ${formatDateLabel(selectedDate)}.`);
+      setStatus(`Đã chọn ${formatDateLabel(selectedDate)}.`);
     });
   });
 
@@ -322,7 +317,7 @@ function renderDayAttendance() {
   const displayRows = [...selectedDayRecords, ...guestRows];
 
   if (!displayRows.length) {
-    dayAttendanceBodyEl.innerHTML = '<tr><td colspan="6">Ch\u01b0a c\u00f3 ai ch\u1ea5m c\u00f4ng ng\u00e0y n\u00e0y.</td></tr>';
+    dayAttendanceBodyEl.innerHTML = '<tr><td colspan="6">Chưa có ai chấm công ngày này.</td></tr>';
     return;
   }
 
@@ -336,13 +331,13 @@ function renderDayAttendance() {
       <tr>
         <td>${escapeHtml(record.fullName)}</td>
         <td>${escapeHtml(record.username)}</td>
-        <td>${record.gender === 'female' ? 'N\u1eef' : 'Nam'}</td>
+        <td>${record.gender === 'female' ? 'Nữ' : 'Nam'}</td>
         <td>${timestampText}</td>
         <td>${formatCurrency(record.charge || 0)}</td>
         <td>
           ${
             canDelete
-              ? `<button class="btn danger mini" data-delete-attendance="${escapeHtml(record.id)}" type="button">XoÃ¡</button>`
+              ? `<button class="btn danger mini" data-delete-attendance="${escapeHtml(record.id)}" type="button">Xóa</button>`
               : '-'
           }
         </td>
@@ -352,8 +347,7 @@ function renderDayAttendance() {
 
   Array.from(dayAttendanceBodyEl.querySelectorAll('button[data-delete-attendance]')).forEach((button) => {
     button.addEventListener('click', async () => {
-      const recordId = button.dataset.deleteAttendance;
-      await deleteAttendanceById(recordId);
+      await deleteAttendanceById(button.dataset.deleteAttendance);
     });
   });
 }
@@ -364,7 +358,7 @@ function renderDataSummary(summary) {
   sumMaleGuestEl.textContent = formatCurrency(summary.maleGuestAmount || 0);
   sumFemaleGuestEl.textContent = formatCurrency(summary.femaleGuestAmount || 0);
   sumTotalEl.textContent = formatCurrency(summary.totalRevenue || 0);
-  dayTotalRevenueEl.textContent = `TÃ¡Â»â€¢ng thu ngÃƒÂ y: ${formatCurrency(summary.totalRevenue || 0)} VNÃ„Â`;
+  dayTotalRevenueEl.textContent = `Tổng thu ngày: ${formatCurrency(summary.totalRevenue || 0)} VNĐ`;
 }
 
 function setDataFormDisabled(disabled) {
@@ -384,8 +378,8 @@ function setDataFormDisabled(disabled) {
 async function loadCurrentUser() {
   const data = await httpJson('/api/auth/me');
   currentUser = data.user;
-  userLabelEl.textContent = `Xin chÃƒÂ o ${currentUser.fullName} (${currentUser.username}) - ${
-    currentUser.gender === 'female' ? 'NÃ¡Â»Â¯' : 'Nam'
+  userLabelEl.textContent = `Xin chào ${currentUser.fullName} (${currentUser.username}) - ${
+    currentUser.gender === 'female' ? 'Nữ' : 'Nam'
   } - ${currentUser.role}`;
 }
 
@@ -400,13 +394,14 @@ async function loadCalendar(monthKey = currentMonthKey) {
       ? today
       : calendarDays[0]?.date || '';
   }
+
   syncDateInputsFromSelectedDate();
   renderCalendar();
 }
 
 async function loadDayAttendance() {
   if (!selectedDate) {
-    selectedDateLabelEl.textContent = 'ChÃ†Â°a chÃ¡Â»Ân ngÃƒÂ y.';
+    selectedDateLabelEl.textContent = 'Chưa chọn ngày.';
     selectedDayRecords = [];
     selectedDaySummary = null;
     selectedDayInputs = { SB: 0, SG: 0 };
@@ -417,7 +412,7 @@ async function loadDayAttendance() {
   const data = await httpJson(`/api/attendance/day?date=${encodeURIComponent(selectedDate)}`);
   selectedDayRecords = data.records || [];
   selectedDaySummary = data.summary || {};
-  selectedDateLabelEl.textContent = `NgÃƒÂ y Ã„â€˜ÃƒÂ£ chÃ¡Â»Ân: ${formatDateLabel(selectedDate)}`;
+  selectedDateLabelEl.textContent = `Ngày đã chọn: ${formatDateLabel(selectedDate)}`;
 
   renderDayAttendance();
   renderDataSummary(selectedDaySummary);
@@ -440,11 +435,12 @@ async function loadDayData() {
   };
 
   dataPermissionLabelEl.textContent = dayDataPermission.hasInputPermission
-    ? 'BÃ¡ÂºÂ¡n cÃƒÂ³ quyÃ¡Â»Ân nhÃ¡ÂºÂ­p dÃ¡Â»Â¯ liÃ¡Â»â€¡u.'
-    : 'BÃ¡ÂºÂ¡n khÃƒÂ´ng cÃƒÂ³ quyÃ¡Â»Ân nhÃ¡ÂºÂ­p dÃ¡Â»Â¯ liÃ¡Â»â€¡u. ChÃ¡Â»â€° Admin hoÃ¡ÂºÂ·c ngÃ†Â°Ã¡Â»Âi Ã„â€˜Ã†Â°Ã¡Â»Â£c Admin cÃ¡ÂºÂ¥p quyÃ¡Â»Ân mÃ¡Â»â€ºi nhÃ¡ÂºÂ­p Ã„â€˜Ã†Â°Ã¡Â»Â£c.';
+    ? 'Bạn có quyền nhập dữ liệu.'
+    : 'Bạn không có quyền nhập dữ liệu. Chỉ Admin hoặc người được cấp quyền mới nhập được.';
 
   setDataFormDisabled(!dayDataPermission.hasInputPermission);
   applyInputsAndFormulasToForm(data.inputs || {}, data.formulas || {});
+
   selectedDayInputs = {
     SB: Number(data.inputs?.SB || 0),
     SG: Number(data.inputs?.SG || 0)
@@ -459,7 +455,7 @@ async function loadDayData() {
 
 function renderEditorList(editors, canManageEditors) {
   if (!editors.length) {
-    editorListBodyEl.innerHTML = '<tr><td colspan="4">ChÃ†Â°a cÃƒÂ³ ai Ã„â€˜Ã†Â°Ã¡Â»Â£c cÃ¡ÂºÂ¥p quyÃ¡Â»Ân nhÃ¡ÂºÂ­p dÃ¡Â»Â¯ liÃ¡Â»â€¡u.</td></tr>';
+    editorListBodyEl.innerHTML = '<tr><td colspan="4">Chưa có ai được cấp quyền nhập dữ liệu.</td></tr>';
     return;
   }
 
@@ -469,11 +465,11 @@ function renderEditorList(editors, canManageEditors) {
       <tr>
         <td>${escapeHtml(item.username)}</td>
         <td>${escapeHtml(item.fullName)}</td>
-        <td>${item.gender === 'female' ? 'NÃ¡Â»Â¯' : 'Nam'}</td>
+        <td>${item.gender === 'female' ? 'Nữ' : 'Nam'}</td>
         <td>
           ${
             canManageEditors
-              ? `<button class="btn danger mini" data-remove-editor="${escapeHtml(item.username)}" type="button">XoÃƒÂ¡ quyÃ¡Â»Ân</button>`
+              ? `<button class="btn danger mini" data-remove-editor="${escapeHtml(item.username)}" type="button">Xóa quyền</button>`
               : '-'
           }
         </td>
@@ -483,8 +479,7 @@ function renderEditorList(editors, canManageEditors) {
 
   Array.from(editorListBodyEl.querySelectorAll('button[data-remove-editor]')).forEach((button) => {
     button.addEventListener('click', async () => {
-      const username = button.dataset.removeEditor;
-      await removeEditor(username);
+      await removeEditor(button.dataset.removeEditor);
     });
   });
 }
@@ -497,10 +492,25 @@ function renderFixedMembers(users, allowDelete) {
   const total = sortedUsers.length;
   const femaleCount = sortedUsers.filter((item) => item.gender === 'female').length;
   const maleCount = total - femaleCount;
-  fixedMemberSummaryEl.textContent = `T\u1ed5ng ${total} th\u00e0nh vi\u00ean c\u1ed1 \u0111\u1ecbnh (Nam: ${maleCount}, N\u1eef: ${femaleCount}).`;
+  fixedMemberSummaryEl.textContent = `Tổng ${total} thành viên cố định (Nam: ${maleCount}, Nữ: ${femaleCount}).`;
+
+  const deletableUsers = sortedUsers.filter((item) => item.username !== currentUser?.username);
+  fixedMemberSelectEl.innerHTML = deletableUsers.length
+    ? deletableUsers
+        .map(
+          (item) =>
+            `<option value="${escapeHtml(item.username)}">${escapeHtml(item.fullName)} (${escapeHtml(
+              item.username
+            )})</option>`
+        )
+        .join('')
+    : '<option value="">Không có thành viên để xoá</option>';
+
+  fixedMemberSelectEl.disabled = !allowDelete || !deletableUsers.length;
+  deleteFixedMemberBtnEl.disabled = !allowDelete || !deletableUsers.length;
 
   if (!sortedUsers.length) {
-    fixedMemberBodyEl.innerHTML = '<tr><td colspan="6">Ch\u01b0a c\u00f3 th\u00e0nh vi\u00ean c\u1ed1 \u0111\u1ecbnh n\u00e0o.</td></tr>';
+    fixedMemberBodyEl.innerHTML = '<tr><td colspan="5">Chưa có thành viên cố định nào.</td></tr>';
     return;
   }
 
@@ -511,35 +521,18 @@ function renderFixedMembers(users, allowDelete) {
         <td>${index + 1}</td>
         <td>${escapeHtml(item.fullName)}</td>
         <td>${escapeHtml(item.username)}</td>
-        <td>${item.gender === 'female' ? 'N\u1eef' : 'Nam'}</td>
-        <td>${item.role === 'admin' ? 'Admin' : 'Th\u00e0nh vi\u00ean'}</td>
-        <td>
-          ${
-            allowDelete && item.username !== currentUser?.username
-              ? `<button class="btn danger mini" data-delete-member="${escapeHtml(item.username)}" type="button">X\u00f3a</button>`
-              : '-'
-          }
-        </td>
+        <td>${item.gender === 'female' ? 'Nữ' : 'Nam'}</td>
+        <td>${item.role === 'admin' ? 'Admin' : 'Thành viên'}</td>
       </tr>`
     )
     .join('');
-
-  if (!allowDelete) {
-    return;
-  }
-
-  Array.from(fixedMemberBodyEl.querySelectorAll('button[data-delete-member]')).forEach((button) => {
-    button.addEventListener('click', async () => {
-      const username = button.dataset.deleteMember;
-      await deleteFixedMember(username);
-    });
-  });
 }
 
 async function loadEditorData() {
   const data = await httpJson('/api/data-editors');
   editorManageCardEl.classList.toggle('hidden', !data.canManageEditors);
   renderEditorList(data.editors || [], data.canManageEditors);
+
   fixedMembers = Array.isArray(data.users) ? data.users : [];
   canDeleteFixedMembers = Boolean(data.canDeleteMembers);
   renderFixedMembers(fixedMembers, canDeleteFixedMembers);
@@ -547,9 +540,8 @@ async function loadEditorData() {
 
 async function addEditor() {
   const username = editorUsernameInputEl.value.trim();
-
   if (!username) {
-    setStatus('Vui lÃƒÂ²ng nhÃ¡ÂºÂ­p username cÃ¡ÂºÂ§n cÃ¡ÂºÂ¥p quyÃ¡Â»Ân.', true);
+    setStatus('Vui lòng nhập username cần cấp quyền.', true);
     return;
   }
 
@@ -560,7 +552,7 @@ async function addEditor() {
     });
 
     editorUsernameInputEl.value = '';
-    setStatus('Ã„ÂÃƒÂ£ cÃ¡ÂºÂ¥p quyÃ¡Â»Ân nhÃ¡ÂºÂ­p dÃ¡Â»Â¯ liÃ¡Â»â€¡u.');
+    setStatus('Đã cấp quyền nhập dữ liệu.');
     await loadEditorData();
   } catch (error) {
     setStatus(error.message, true);
@@ -568,7 +560,7 @@ async function addEditor() {
 }
 
 async function removeEditor(username) {
-  const confirmed = window.confirm(`BÃ¡ÂºÂ¡n cÃƒÂ³ chÃ¡ÂºÂ¯c muÃ¡Â»â€˜n xoÃƒÂ¡ quyÃ¡Â»Ân nhÃ¡ÂºÂ­p dÃ¡Â»Â¯ liÃ¡Â»â€¡u cÃ¡Â»Â§a ${username}?`);
+  const confirmed = window.confirm(`Bạn có chắc muốn xóa quyền nhập dữ liệu của ${username}?`);
   if (!confirmed) {
     return;
   }
@@ -578,7 +570,7 @@ async function removeEditor(username) {
       method: 'DELETE'
     });
 
-    setStatus('Ã„ÂÃƒÂ£ xoÃƒÂ¡ quyÃ¡Â»Ân nhÃ¡ÂºÂ­p dÃ¡Â»Â¯ liÃ¡Â»â€¡u.');
+    setStatus('Đã xóa quyền nhập dữ liệu.');
     await loadEditorData();
   } catch (error) {
     setStatus(error.message, true);
@@ -586,23 +578,23 @@ async function removeEditor(username) {
 }
 
 async function deleteFixedMember(username) {
-  if (!username) {
+  const targetUsername = username || fixedMemberSelectEl.value;
+  if (!targetUsername) {
+    setStatus('Vui lòng chọn thành viên cần xoá.', true);
     return;
   }
 
-  const confirmed = window.confirm(
-    `B\u1ea1n c\u00f3 ch\u1eafc mu\u1ed1n x\u00f3a th\u00e0nh vi\u00ean c\u1ed1 \u0111\u1ecbnh ${username}?`
-  );
+  const confirmed = window.confirm(`Bạn có chắc muốn xoá thành viên cố định ${targetUsername}?`);
   if (!confirmed) {
     return;
   }
 
   try {
-    await httpJson(`/api/fixed-members/${encodeURIComponent(username)}`, {
+    await httpJson(`/api/fixed-members/${encodeURIComponent(targetUsername)}`, {
       method: 'DELETE'
     });
 
-    setStatus(`\u0110\u00e3 x\u00f3a th\u00e0nh vi\u00ean c\u1ed1 \u0111\u1ecbnh ${username}.`);
+    setStatus(`Đã xoá thành viên cố định ${targetUsername}.`);
     await refreshAll();
     await loadLeaderboard();
   } catch (error) {
@@ -629,7 +621,7 @@ function shiftMonth(step) {
 
 async function markAttendance() {
   if (!selectedDate) {
-    setStatus('Vui lÃƒÂ²ng chÃ¡Â»Ân ngÃƒÂ y Ã„â€˜Ã¡Â»Æ’ chÃ¡ÂºÂ¥m cÃƒÂ´ng.', true);
+    setStatus('Vui lòng chọn ngày để chấm công.', true);
     return;
   }
 
@@ -639,7 +631,7 @@ async function markAttendance() {
       body: JSON.stringify({ date: selectedDate })
     });
 
-    setStatus(`Ã„ÂÃƒÂ£ chÃ¡ÂºÂ¥m cÃƒÂ´ng ngÃƒÂ y ${formatDateLabel(selectedDate)}.`);
+    setStatus(`Đã chấm công ngày ${formatDateLabel(selectedDate)}.`);
     await loadCalendar(currentMonthKey);
     await refreshSelectedDateData();
   } catch (error) {
@@ -652,7 +644,7 @@ async function deleteAttendanceById(recordId) {
     return;
   }
 
-  const confirmed = window.confirm('BÃ¡ÂºÂ¡n cÃƒÂ³ chÃ¡ÂºÂ¯c muÃ¡Â»â€˜n xoÃƒÂ¡ chÃ¡ÂºÂ¥m cÃƒÂ´ng nÃƒÂ y khÃƒÂ´ng?');
+  const confirmed = window.confirm('Bạn có chắc muốn xóa chấm công này không?');
   if (!confirmed) {
     return;
   }
@@ -662,7 +654,7 @@ async function deleteAttendanceById(recordId) {
       method: 'DELETE'
     });
 
-    setStatus('Ã„ÂÃƒÂ£ xoÃƒÂ¡ chÃ¡ÂºÂ¥m cÃƒÂ´ng thÃƒÂ nh cÃƒÂ´ng.');
+    setStatus('Đã xóa chấm công thành công.');
     await loadCalendar(currentMonthKey);
     await refreshSelectedDateData();
   } catch (error) {
@@ -672,9 +664,8 @@ async function deleteAttendanceById(recordId) {
 
 async function deleteSelectedDateAttendance() {
   const selected = getSelectedDayInfo();
-
   if (!selected || !selected.recordId) {
-    setStatus('BÃ¡ÂºÂ¡n chÃ†Â°a chÃ¡ÂºÂ¥m cÃƒÂ´ng ngÃƒÂ y nÃƒÂ y nÃƒÂªn khÃƒÂ´ng thÃ¡Â»Æ’ xoÃƒÂ¡.', true);
+    setStatus('Bạn chưa chấm công ngày này nên không thể xóa.', true);
     return;
   }
 
@@ -721,7 +712,7 @@ function applyInputsAndFormulasToForm(inputs, formulas) {
 
 async function calculateDayData() {
   if (!selectedDate) {
-    setStatus('Vui lÃƒÂ²ng chÃ¡Â»Ân ngÃƒÂ y trÃ†Â°Ã¡Â»â€ºc khi tÃƒÂ­nh.', true);
+    setStatus('Vui lòng chọn ngày trước khi tính.', true);
     return;
   }
 
@@ -735,7 +726,7 @@ async function calculateDayData() {
       })
     });
 
-    setStatus('Ã„ÂÃƒÂ£ tÃƒÂ­nh vÃƒÂ  lÃ†Â°u dÃ¡Â»Â¯ liÃ¡Â»â€¡u ngÃƒÂ y thÃƒÂ nh cÃƒÂ´ng.');
+    setStatus('Đã tính và lưu dữ liệu ngày thành công.');
     await refreshSelectedDateData();
   } catch (error) {
     setStatus(error.message, true);
@@ -744,19 +735,18 @@ async function calculateDayData() {
 
 async function copyDayDataFromSource() {
   if (!dayDataPermission.hasInputPermission) {
-    setStatus('BÃ¡ÂºÂ¡n khÃƒÂ´ng cÃƒÂ³ quyÃ¡Â»Ân sao chÃƒÂ©p dÃ¡Â»Â¯ liÃ¡Â»â€¡u ngÃƒÂ y.', true);
+    setStatus('Bạn không có quyền sao chép dữ liệu ngày.', true);
     return;
   }
 
   if (!selectedDate) {
-    setStatus('Vui lÃƒÂ²ng chÃ¡Â»Ân ngÃƒÂ y Ã„â€˜ÃƒÂ­ch trÃ†Â°Ã¡Â»â€ºc khi sao chÃƒÂ©p.', true);
+    setStatus('Vui lòng chọn ngày đích trước khi sao chép.', true);
     return;
   }
 
   const sourceDate = normalizeDateKey(copySourceDateInputEl.value);
-
   if (!sourceDate) {
-    setStatus('Vui lÃƒÂ²ng chÃ¡Â»Ân ngÃƒÂ y nguÃ¡Â»â€œn hÃ¡Â»Â£p lÃ¡Â»â€¡.', true);
+    setStatus('Vui lòng chọn ngày nguồn hợp lệ.', true);
     return;
   }
 
@@ -764,18 +754,17 @@ async function copyDayDataFromSource() {
     const data = await httpJson(`/api/day-data?date=${encodeURIComponent(sourceDate)}`);
     applyInputsAndFormulasToForm(data.inputs || {}, data.formulas || {});
     setStatus(
-      `Ã„ÂÃƒÂ£ sao chÃƒÂ©p dÃ¡Â»Â¯ liÃ¡Â»â€¡u tÃ¡Â»Â« ${formatDateLabel(sourceDate)}. BÃ¡ÂºÂ¥m "TÃƒÂ­nh vÃƒÂ  lÃ†Â°u" Ã„â€˜Ã¡Â»Æ’ ÃƒÂ¡p dÃ¡Â»Â¥ng cho ngÃƒÂ y Ã„â€˜ang chÃ¡Â»Ân.`
+      `Đã sao chép dữ liệu từ ${formatDateLabel(sourceDate)}. Bấm "Tính và lưu" để áp dụng cho ngày đang chọn.`
     );
   } catch (error) {
-    setStatus(`KhÃƒÂ´ng thÃ¡Â»Æ’ sao chÃƒÂ©p dÃ¡Â»Â¯ liÃ¡Â»â€¡u: ${error.message}`, true);
+    setStatus(`Không thể sao chép dữ liệu: ${error.message}`, true);
   }
 }
 
 async function exportAttendanceExcel() {
   const date = normalizeDateKey(exportDateInputEl.value) || selectedDate;
-
   if (!date) {
-    setStatus('Vui l\u00f2ng ch\u1ecdn ng\u00e0y \u0111\u1ec3 xu\u1ea5t Excel.', true);
+    setStatus('Vui lòng chọn ngày để xuất Excel.', true);
     return;
   }
 
@@ -791,23 +780,23 @@ async function exportAttendanceExcel() {
     const displayRows = [...records, ...guestRows];
 
     const rows = [];
-    rows.push(['Ng\u00e0y', date]);
+    rows.push(['Ngày', date]);
     rows.push([]);
-    rows.push(['STT', 'H\u1ecd t\u00ean', 'Username', 'Gi\u1edbi t\u00ednh', 'Th\u1eddi gian ch\u1ea5m', 'Ph\u1ea3i tr\u1ea3 (VN\u0110)']);
+    rows.push(['STT', 'Họ tên', 'Username', 'Giới tính', 'Thời gian chấm', 'Phải trả (VNĐ)']);
 
     displayRows.forEach((record, index) => {
       rows.push([
         index + 1,
         record.fullName || '',
         record.username || '',
-        record.gender === 'female' ? 'N\u1eef' : 'Nam',
+        record.gender === 'female' ? 'Nữ' : 'Nam',
         record.timestamp ? formatDateTime(record.timestamp) : '',
         Number(record.charge || 0)
       ]);
     });
 
     rows.push([]);
-    rows.push(['T\u1ed5ng thu ng\u00e0y (VN\u0110)', Number(summary.totalRevenue || 0)]);
+    rows.push(['Tổng thu ngày (VNĐ)', Number(summary.totalRevenue || 0)]);
 
     const csv = `\ufeff${rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n')}`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -820,17 +809,15 @@ async function exportAttendanceExcel() {
     link.remove();
     window.URL.revokeObjectURL(url);
 
-    setStatus(`\u0110\u00e3 xu\u1ea5t Excel cho ng\u00e0y ${formatDateLabel(date)}.`);
+    setStatus(`Đã xuất Excel cho ngày ${formatDateLabel(date)}.`);
   } catch (error) {
-    setStatus(`Kh\u00f4ng th\u1ec3 xu\u1ea5t Excel: ${error.message}`, true);
+    setStatus(`Không thể xuất Excel: ${error.message}`, true);
   }
 }
 
 function toggleQr() {
   qrWrapEl.classList.toggle('hidden');
-  toggleQrBtnEl.textContent = qrWrapEl.classList.contains('hidden')
-    ? 'Hi\u1ec7n m\u00e3 QR'
-    : '\u1ea8n m\u00e3 QR';
+  toggleQrBtnEl.textContent = qrWrapEl.classList.contains('hidden') ? 'Hiện mã QR' : 'Ẩn mã QR';
 }
 
 async function handleLogout() {
@@ -891,18 +878,14 @@ function drawGame() {
 
   gameCtx.fillStyle = '#0f172a';
   gameCtx.font = '14px Segoe UI';
-  gameCtx.fillText(`BÃ¡Â»Â lÃ¡Â»Â¡: ${gameState.misses}/3`, 20, 32);
+  gameCtx.fillText(`Bỏ lỡ: ${gameState.misses}/3`, 20, 32);
 }
 
 function updateGame(dt) {
   const shuttle = gameState.shuttle;
   const paddleY = gameCanvas.height - 26;
 
-
-  gameState.paddleX = Math.max(
-    0,
-    Math.min(gameCanvas.width - gameState.paddleWidth, gameState.paddleX)
-  );
+  gameState.paddleX = Math.max(0, Math.min(gameCanvas.width - gameState.paddleWidth, gameState.paddleX));
 
   const difficultyMultiplier = 1 + (gameState.level - 1) * 0.25;
   shuttle.vy += 220 * dt * difficultyMultiplier;
@@ -917,7 +900,12 @@ function updateGame(dt) {
     shuttle.x >= gameState.paddleX - shuttle.radius &&
     shuttle.x <= gameState.paddleX + gameState.paddleWidth + shuttle.radius;
 
-  if (shuttle.vy > 0 && shuttle.y + shuttle.radius >= paddleY && shuttle.y - shuttle.radius <= paddleY + 12 && withinPaddleX) {
+  if (
+    shuttle.vy > 0 &&
+    shuttle.y + shuttle.radius >= paddleY &&
+    shuttle.y - shuttle.radius <= paddleY + 12 &&
+    withinPaddleX
+  ) {
     shuttle.y = paddleY - shuttle.radius - 1;
     shuttle.vy = -Math.abs((170 + gameState.level * 25) * 2);
     shuttle.vx += (Math.random() - 0.5) * 120;
@@ -926,12 +914,10 @@ function updateGame(dt) {
 
   if (shuttle.y - shuttle.radius > gameCanvas.height + 12) {
     gameState.misses += 1;
-
     if (gameState.misses >= 3) {
       endGame();
       return;
     }
-
     resetShuttle();
   }
 }
@@ -948,7 +934,6 @@ async function submitGameScoreOnce() {
   }
 
   gameState.scoreSubmitted = true;
-
   try {
     await httpJson('/api/game/score', {
       method: 'POST',
@@ -967,7 +952,8 @@ function endGame() {
     cancelAnimationFrame(gameState.rafId);
     gameState.rafId = 0;
   }
-  gameInfoEl.textContent = `KÃ¡ÂºÂ¿t thÃƒÂºc. Ã„ÂiÃ¡Â»Æ’m cÃ¡Â»Â§a bÃ¡ÂºÂ¡n: ${gameState.score}.`;
+
+  gameInfoEl.textContent = `Kết thúc. Điểm của bạn: ${gameState.score}.`;
   submitGameScoreOnce().catch(() => {});
 }
 
@@ -984,6 +970,7 @@ function gameLoop(timestamp) {
   if (dt > 0.05) {
     dt = 0.05;
   }
+
   gameState.lastTs = timestamp;
   gameState.elapsed += dt;
   gameState.level = Math.floor(gameState.elapsed / 35) + 1;
@@ -1012,17 +999,18 @@ function startGame() {
   gameState.level = 1;
   gameState.misses = 0;
   gameState.paddleX = (gameCanvas.width - gameState.paddleWidth) / 2;
+
   resetShuttle();
-  gameInfoEl.textContent =
-    'Di chuy\u1ec3n chu\u1ed9t (PC) ho\u1eb7c ch\u1ea1m/k\u00e9o tr\u00ean game (di\u1ec7n tho\u1ea1i) \u0111\u1ec3 \u0111i\u1ec1u khi\u1ec3n v\u1ee3t.';
+  gameInfoEl.textContent = 'Di chuyển chuột (PC) hoặc chạm/kéo trên game (điện thoại) để điều khiển vợt.';
   drawGame();
   updateGameMeta();
+
   gameState.rafId = requestAnimationFrame(gameLoop);
 }
 
 function renderLeaderboard(leaderboard) {
   if (!leaderboard.length) {
-    leaderboardBodyEl.innerHTML = '<tr><td colspan="4">ChÃ†Â°a cÃƒÂ³ Ã„â€˜iÃ¡Â»Æ’m nÃƒÂ o.</td></tr>';
+    leaderboardBodyEl.innerHTML = '<tr><td colspan="4">Chưa có điểm nào.</td></tr>';
     return;
   }
 
@@ -1044,7 +1032,7 @@ async function loadLeaderboard() {
     const data = await httpJson('/api/game/leaderboard');
     renderLeaderboard(data.leaderboard || []);
   } catch (error) {
-    setStatus(`KhÃƒÂ´ng tÃ¡ÂºÂ£i Ã„â€˜Ã†Â°Ã¡Â»Â£c bÃ¡ÂºÂ£ng xÃ¡ÂºÂ¿p hÃ¡ÂºÂ¡ng: ${error.message}`, true);
+    setStatus(`Không tải được bảng xếp hạng: ${error.message}`, true);
   }
 }
 
@@ -1082,6 +1070,7 @@ function setupPointerControlsForGame() {
     }
   });
 }
+
 function setupEvents() {
   document.getElementById('tabCalendar').addEventListener('click', () => switchTab('calendar'));
   document.getElementById('tabData').addEventListener('click', () => switchTab('data'));
@@ -1108,11 +1097,12 @@ function setupEvents() {
   calculateDayBtnEl.addEventListener('click', calculateDayData);
   copyDayDataBtnEl.addEventListener('click', copyDayDataFromSource);
   addEditorBtnEl.addEventListener('click', addEditor);
+  deleteFixedMemberBtnEl.addEventListener('click', () => deleteFixedMember());
 
   document.getElementById('refreshBtn').addEventListener('click', async () => {
     await refreshAll();
     await loadLeaderboard();
-    setStatus('Ã„ÂÃƒÂ£ lÃƒÂ m mÃ¡Â»â€ºi toÃƒÂ n bÃ¡Â»â„¢ dÃ¡Â»Â¯ liÃ¡Â»â€¡u.');
+    setStatus('Đã làm mới toàn bộ dữ liệu.');
   });
 
   document.getElementById('logoutBtn').addEventListener('click', handleLogout);
@@ -1133,7 +1123,7 @@ async function init() {
     await loadCurrentUser();
     await refreshAll();
     await loadLeaderboard();
-    setStatus('SÃ¡ÂºÂµn sÃƒÂ ng.');
+    setStatus('Sẵn sàng.');
     drawGame();
   } catch (error) {
     if (error.status === 401) {
@@ -1147,6 +1137,3 @@ async function init() {
 }
 
 init();
-
-
-

@@ -245,6 +245,14 @@
             <p id="fixedMemberSummary" class="muted"></p>
           </div>
 
+          <div class="actions">
+            <label class="inline-field">
+              Chọn thành viên cần xoá
+              <select id="fixedMemberSelect"></select>
+            </label>
+            <button id="deleteFixedMemberBtn" class="btn danger">Xoá thành viên</button>
+          </div>
+
           <div class="table-wrap">
             <table>
               <thead>
@@ -254,7 +262,6 @@
                   <th>Username</th>
                   <th>Giới tính</th>
                   <th>Vai trò</th>
-                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody id="fixedMemberBody"></tbody>

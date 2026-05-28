@@ -138,8 +138,8 @@ async function checkExistingSession() {
   }
 
   try {
-    const data = await httpJson('/api/auth/me');
-    setAuthStatus(`Bạn đang đăng nhập: ${data.user.fullName}. Có thể mở cửa sổ chấm công.`);
+    await httpJson('/api/auth/me');
+    window.location.href = '/dashboard.html';
   } catch {
     setAuthToken('');
   }

@@ -73,7 +73,6 @@ function normalizeName(name) {
 
 function normalizeGender(gender) {
   const value = String(gender || '').trim().toLowerCase();
-
   if (['male', 'nam', 'm'].includes(value)) {
     return 'male';
   }
@@ -1530,10 +1529,10 @@ async function handleApi(req, res, requestUrl) {
       }
 
       await writeDb(db);
-      sendJson(res, 200, { message: 'Đã xoá quyền nhập dữ liệu.' });
+      sendJson(res, 200, { message: 'Đã xóa quyền nhập dữ liệu.' });
       return true;
     } catch (error) {
-      sendJson(res, 500, { error: error.message || 'Không thể xoá quyền.' });
+      sendJson(res, 500, { error: error.message || 'Không thể xóa quyền.' });
       return true;
     }
   }
@@ -1548,39 +1547,39 @@ async function handleApi(req, res, requestUrl) {
       }
 
       if (!hasDataInputPermission(user, db)) {
-        sendJson(res, 403, { error: 'Báº¡n khÃ´ng cÃ³ quyá»n xoÃ¡ thÃ nh viÃªn cá»‘ Ä‘á»‹nh.' });
+        sendJson(res, 403, { error: 'Bạn không có quyền xóa thành viên cố định.' });
         return true;
       }
 
       const targetKey = usernameKeyFromInput(decodeURIComponent(deleteFixedMemberMatch[1]));
       if (!targetKey) {
-        sendJson(res, 400, { error: 'Username khÃ´ng há»£p lá»‡.' });
+        sendJson(res, 400, { error: 'Username không hợp lệ.' });
         return true;
       }
 
       const targetUser = db.users[targetKey];
       if (!targetUser) {
-        sendJson(res, 404, { error: 'KhÃ´ng tÃ¬m tháº¥y thÃ nh viÃªn cá»‘ Ä‘á»‹nh nÃ y.' });
+        sendJson(res, 404, { error: 'Không tìm thấy thành viên cố định này.' });
         return true;
       }
 
       if (targetKey === user.usernameKey) {
-        sendJson(res, 409, { error: 'KhÃ´ng thá»ƒ tá»± xoÃ¡ chÃ­nh tÃ i khoáº£n Ä‘ang Ä‘Äƒng nháº­p.' });
+        sendJson(res, 409, { error: 'Không thể tự xóa chính tài khoản đang đăng nhập.' });
         return true;
       }
 
       if (targetUser.role === 'admin' && user.role !== 'admin') {
-        sendJson(res, 403, { error: 'Chá»‰ admin má»›i Ä‘Æ°á»£c xoÃ¡ tÃ i khoáº£n admin.' });
+        sendJson(res, 403, { error: 'Chỉ admin mới được xóa tài khoản admin.' });
         return true;
       }
 
       removeUserFromAllData(db, targetKey);
       await writeDb(db);
 
-      sendJson(res, 200, { message: `ÄÃ£ xoÃ¡ thÃ nh viÃªn cá»‘ Ä‘á»‹nh ${targetUser.username}.` });
+      sendJson(res, 200, { message: `Đã xóa thành viên cố định ${targetUser.username}.` });
       return true;
     } catch (error) {
-      sendJson(res, 500, { error: error.message || 'KhÃ´ng thá»ƒ xoÃ¡ thÃ nh viÃªn cá»‘ Ä‘á»‹nh.' });
+      sendJson(res, 500, { error: error.message || 'Không thể xóa thành viên cố định.' });
       return true;
     }
   }
