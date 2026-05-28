@@ -397,32 +397,6 @@ thead th {
   margin: 0;
 }
 
-.fixed-stats-date-list {
-  margin-top: 10px;
-  display: grid;
-  gap: 8px;
-}
-
-.fixed-stats-date-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f8fbff;
-  padding: 8px 10px;
-}
-
-.fixed-stats-date-check {
-  margin: 0;
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
 #fixedMembersPanel table {
   min-width: 620px;
 }

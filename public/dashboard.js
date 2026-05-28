@@ -66,10 +66,6 @@ const fixedMemberBodyEl = document.getElementById('fixedMemberBody');
 const fixedMemberSummaryEl = document.getElementById('fixedMemberSummary');
 const fixedMemberSelectEl = document.getElementById('fixedMemberSelect');
 const deleteFixedMemberBtnEl = document.getElementById('deleteFixedMemberBtn');
-const fixedStatsDateInputEl = document.getElementById('fixedStatsDateInput');
-const addFixedStatsDateBtnEl = document.getElementById('addFixedStatsDateBtn');
-const clearFixedStatsDatesBtnEl = document.getElementById('clearFixedStatsDatesBtn');
-const fixedStatsDateListEl = document.getElementById('fixedStatsDateList');
 const fixedStatsSummaryEl = document.getElementById('fixedStatsSummary');
 const fixedStatsMonthLabelEl = document.getElementById('fixedStatsMonthLabel');
 const fixedStatsCalendarGridEl = document.getElementById('fixedStatsCalendarGrid');
@@ -281,9 +277,6 @@ function updateCalendarActionButtons() {
 
 function syncDateInputsFromSelectedDate() {
   exportDateInputEl.value = selectedDate || '';
-  if (fixedStatsDateInputEl && !fixedStatsDateInputEl.value) {
-    fixedStatsDateInputEl.value = selectedDate || '';
-  }
 }
 
 function buildGuestRows(summary = {}, inputs = {}) {
@@ -572,56 +565,6 @@ function updateFixedStatsSummary(totals) {
   )} VNĐ.`;
 }
 
-function renderFixedStatsDateList() {
-  if (!fixedStatsDateListEl) {
-    return;
-  }
-
-  if (!fixedStatsDates.length) {
-    fixedStatsDateListEl.innerHTML = '<p class="muted">Chưa có ngày nào trong danh sách cộng tiền.</p>';
-    return;
-  }
-
-  fixedStatsDateListEl.innerHTML = fixedStatsDates
-    .map(
-      (item) => `
-      <div class="fixed-stats-date-item">
-        <label class="fixed-stats-date-check">
-          <input type="checkbox" data-fixed-stats-toggle="${escapeHtml(item.date)}" ${
-            item.enabled ? 'checked' : ''
-          } />
-          <span>${escapeHtml(formatDateShort(item.date))}</span>
-        </label>
-        <button class="btn ghost mini" type="button" data-fixed-stats-remove="${escapeHtml(item.date)}">Bỏ ngày</button>
-      </div>`
-    )
-    .join('');
-
-  Array.from(fixedStatsDateListEl.querySelectorAll('input[data-fixed-stats-toggle]')).forEach((input) => {
-    input.addEventListener('change', async () => {
-      const date = input.dataset.fixedStatsToggle || '';
-      const target = fixedStatsDates.find((item) => item.date === date);
-      if (!target) {
-        return;
-      }
-
-      target.enabled = input.checked;
-      renderFixedStatsCalendar();
-      await refreshFixedMemberStatistics();
-    });
-  });
-
-  Array.from(fixedStatsDateListEl.querySelectorAll('button[data-fixed-stats-remove]')).forEach((button) => {
-    button.addEventListener('click', async () => {
-      const date = button.dataset.fixedStatsRemove || '';
-      fixedStatsDates = fixedStatsDates.filter((item) => item.date !== date);
-      renderFixedStatsDateList();
-      renderFixedStatsCalendar();
-      await refreshFixedMemberStatistics();
-    });
-  });
-}
-
 function renderFixedStatsCalendar() {
   if (!fixedStatsMonthLabelEl || !fixedStatsCalendarGridEl) {
     return;
@@ -655,7 +598,6 @@ function renderFixedStatsCalendar() {
       }
 
       renderFixedStatsCalendar();
-      renderFixedStatsDateList();
       await refreshFixedMemberStatistics();
     });
   });
@@ -713,43 +655,6 @@ function invalidateFixedStatsCache(date) {
   fixedStatsChargesByDate.clear();
 }
 
-async function addFixedStatsDate() {
-  const date = normalizeDateKey((fixedStatsDateInputEl?.value || '').trim() || selectedDate);
-  if (!date) {
-    setStatus('Vui lòng chọn ngày hợp lệ để thống kê.', true);
-    return;
-  }
-
-  const existing = fixedStatsDates.find((item) => item.date === date);
-  if (existing) {
-    existing.enabled = true;
-    renderFixedStatsDateList();
-    renderFixedStatsCalendar();
-    await refreshFixedMemberStatistics();
-    setStatus(`Ngày ${formatDateShort(date)} đã có trong danh sách thống kê.`);
-    return;
-  }
-
-  fixedStatsDates.push({ date, enabled: true });
-  fixedStatsDates = fixedStatsDates.sort((a, b) => a.date.localeCompare(b.date));
-  renderFixedStatsDateList();
-  renderFixedStatsCalendar();
-  await refreshFixedMemberStatistics();
-  setStatus(`Đã thêm ngày ${formatDateShort(date)} vào thống kê Tab 4.`);
-}
-
-async function clearFixedStatsDates() {
-  if (!fixedStatsDates.length) {
-    return;
-  }
-
-  fixedStatsDates = [];
-  renderFixedStatsDateList();
-  renderFixedStatsCalendar();
-  await refreshFixedMemberStatistics();
-  setStatus('Đã xoá danh sách ngày thống kê Tab 4.');
-}
-
 async function selectFixedStatsMonth() {
   const days = getDaysInMonth(fixedStatsMonthKey);
 
@@ -764,7 +669,6 @@ async function selectFixedStatsMonth() {
 
   fixedStatsDates = fixedStatsDates.sort((a, b) => a.date.localeCompare(b.date));
   renderFixedStatsCalendar();
-  renderFixedStatsDateList();
   await refreshFixedMemberStatistics();
   setStatus(`Đã tích toàn bộ ${formatMonthLabel(fixedStatsMonthKey)}.`);
 }
@@ -786,7 +690,6 @@ async function clearFixedStatsMonth() {
   }
 
   renderFixedStatsCalendar();
-  renderFixedStatsDateList();
   await refreshFixedMemberStatistics();
   setStatus(`Đã bỏ tích ${formatMonthLabel(fixedStatsMonthKey)}.`);
 }
@@ -848,7 +751,6 @@ async function loadEditorData() {
   canDeleteFixedMembers = Boolean(data.canDeleteMembers);
   renderFixedMembers(fixedMembers, canDeleteFixedMembers, getFixedStatsTotals());
   renderFixedStatsCalendar();
-  renderFixedStatsDateList();
   await refreshFixedMemberStatistics();
 }
 
@@ -1419,12 +1321,6 @@ function setupEvents() {
   copyDayDataBtnEl.addEventListener('click', copyDayDataFromSource);
   addEditorBtnEl.addEventListener('click', addEditor);
   deleteFixedMemberBtnEl.addEventListener('click', () => deleteFixedMember());
-  if (addFixedStatsDateBtnEl) {
-    addFixedStatsDateBtnEl.addEventListener('click', addFixedStatsDate);
-  }
-  if (clearFixedStatsDatesBtnEl) {
-    clearFixedStatsDatesBtnEl.addEventListener('click', clearFixedStatsDates);
-  }
   if (prevFixedStatsMonthBtnEl) {
     prevFixedStatsMonthBtnEl.addEventListener('click', () => {
       fixedStatsMonthKey = shiftMonthKey(fixedStatsMonthKey, -1);
@@ -1442,15 +1338,6 @@ function setupEvents() {
   }
   if (clearFixedStatsMonthBtnEl) {
     clearFixedStatsMonthBtnEl.addEventListener('click', clearFixedStatsMonth);
-  }
-  if (fixedStatsDateInputEl) {
-    fixedStatsDateInputEl.addEventListener('keydown', async (event) => {
-      if (event.key !== 'Enter') {
-        return;
-      }
-      event.preventDefault();
-      await addFixedStatsDate();
-    });
   }
 
   document.getElementById('refreshBtn').addEventListener('click', async () => {
