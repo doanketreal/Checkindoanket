@@ -1,0 +1,130 @@
+﻿<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Checkin Doan Ket</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Checkin Doan Ket</h1>
+      <p class="subtitle">Web cham cong co tao tai khoan va dang nhap.</p>
+
+      <section class="card">
+        <div class="section-header">
+          <h2>Tai khoan</h2>
+        </div>
+
+        <div class="auth-layout">
+          <div class="auth-box">
+            <h3>Dang ky</h3>
+            <div class="grid">
+              <label>
+                Ho va ten
+                <input id="registerFullName" type="text" placeholder="VD: Nguyen Van A" />
+              </label>
+              <label>
+                Ma nhan vien
+                <input id="registerEmployeeId" type="text" placeholder="VD: NV001" />
+              </label>
+              <label>
+                Username
+                <input id="registerUsername" type="text" placeholder="vd: nguyenvana" />
+              </label>
+              <label>
+                Mat khau
+                <input id="registerPassword" type="password" placeholder="Toi thieu 6 ky tu" />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="registerBtn" class="btn in">Dang ky</button>
+            </div>
+            <p class="hint">Tai khoan dau tien duoc gan quyen admin.</p>
+          </div>
+
+          <div class="auth-box">
+            <h3>Dang nhap</h3>
+            <div class="grid">
+              <label>
+                Username
+                <input id="loginUsername" type="text" placeholder="Nhap username" />
+              </label>
+              <label>
+                Mat khau
+                <input id="loginPassword" type="password" placeholder="Nhap mat khau" />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="loginBtn" class="btn out">Dang nhap</button>
+              <button id="logoutBtn" class="btn ghost">Dang xuat</button>
+            </div>
+          </div>
+        </div>
+
+        <p id="authStatus" class="status">Chua dang nhap.</p>
+      </section>
+
+      <section class="card hidden" id="attendanceCard">
+        <div class="section-header">
+          <h2>Cham cong</h2>
+          <p id="currentUserLabel" class="user-label"></p>
+        </div>
+        <div class="actions">
+          <button id="checkInBtn" class="btn in">Check-in</button>
+          <button id="checkOutBtn" class="btn out">Check-out</button>
+          <button id="refreshBtn" class="btn ghost">Tai lai du lieu</button>
+        </div>
+        <p id="status" class="status">San sang.</p>
+      </section>
+
+      <section class="card hidden" id="summaryCard">
+        <div class="section-header">
+          <h2>Tong hop hom nay</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Ma NV</th>
+                <th>Ten</th>
+                <th>Tong gio</th>
+                <th>Lan cuoi</th>
+                <th>Thoi gian</th>
+              </tr>
+            </thead>
+            <tbody id="summaryBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card hidden" id="recordsCard">
+        <div class="section-header">
+          <h2>Lich su</h2>
+          <div class="filters" id="recordFilters">
+            <input id="filterEmployeeId" type="text" placeholder="Loc ma NV" />
+            <input id="filterDate" type="date" />
+            <button id="filterBtn" class="btn ghost">Loc</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Thoi gian</th>
+                <th>Ma NV</th>
+                <th>Ten</th>
+                <th>Tai khoan</th>
+                <th>Hanh dong</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
