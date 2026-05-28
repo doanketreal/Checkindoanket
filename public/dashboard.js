@@ -11,6 +11,7 @@ let dayDataPermission = {
   hasInputPermission: false,
   canManageEditors: false
 };
+let fixedMembers = [];
 
 const userLabelEl = document.getElementById('userLabel');
 const monthLabelEl = document.getElementById('monthLabel');
@@ -50,6 +51,8 @@ const gameScoreEl = document.getElementById('gameScore');
 const gameTimeEl = document.getElementById('gameTime');
 const gameLevelEl = document.getElementById('gameLevel');
 const leaderboardBodyEl = document.getElementById('leaderboardBody');
+const fixedMemberBodyEl = document.getElementById('fixedMemberBody');
+const fixedMemberSummaryEl = document.getElementById('fixedMemberSummary');
 
 const gameState = {
   running: false,
@@ -164,14 +167,17 @@ function switchTab(name) {
   const isCalendar = name === 'calendar';
   const isData = name === 'data';
   const isGame = name === 'game';
+  const isFixedMembers = name === 'fixedMembers';
 
   document.getElementById('tabCalendar').classList.toggle('active', isCalendar);
   document.getElementById('tabData').classList.toggle('active', isData);
   document.getElementById('tabGame').classList.toggle('active', isGame);
+  document.getElementById('tabFixedMembers').classList.toggle('active', isFixedMembers);
 
   document.getElementById('calendarPanel').classList.toggle('active', isCalendar);
   document.getElementById('dataPanel').classList.toggle('active', isData);
   document.getElementById('gamePanel').classList.toggle('active', isGame);
+  document.getElementById('fixedMembersPanel').classList.toggle('active', isFixedMembers);
 }
 
 function getSelectedDayInfo() {
@@ -392,10 +398,41 @@ function renderEditorList(editors, canManageEditors) {
   });
 }
 
+function renderFixedMembers(users) {
+  const sortedUsers = [...users].sort((a, b) =>
+    String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi', { sensitivity: 'base' })
+  );
+
+  const total = sortedUsers.length;
+  const femaleCount = sortedUsers.filter((item) => item.gender === 'female').length;
+  const maleCount = total - femaleCount;
+  fixedMemberSummaryEl.textContent = `Tổng ${total} thành viên cố định (Nam: ${maleCount}, Nữ: ${femaleCount}).`;
+
+  if (!sortedUsers.length) {
+    fixedMemberBodyEl.innerHTML = '<tr><td colspan="5">Chưa có thành viên cố định nào.</td></tr>';
+    return;
+  }
+
+  fixedMemberBodyEl.innerHTML = sortedUsers
+    .map(
+      (item, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(item.fullName)}</td>
+        <td>${escapeHtml(item.username)}</td>
+        <td>${item.gender === 'female' ? 'Nữ' : 'Nam'}</td>
+        <td>${item.role === 'admin' ? 'Admin' : 'Thành viên'}</td>
+      </tr>`
+    )
+    .join('');
+}
+
 async function loadEditorData() {
   const data = await httpJson('/api/data-editors');
   editorManageCardEl.classList.toggle('hidden', !data.canManageEditors);
   renderEditorList(data.editors || [], data.canManageEditors);
+  fixedMembers = Array.isArray(data.users) ? data.users : [];
+  renderFixedMembers(fixedMembers);
 }
 
 async function addEditor() {
@@ -806,6 +843,7 @@ function setupEvents() {
   document.getElementById('tabCalendar').addEventListener('click', () => switchTab('calendar'));
   document.getElementById('tabData').addEventListener('click', () => switchTab('data'));
   document.getElementById('tabGame').addEventListener('click', () => switchTab('game'));
+  document.getElementById('tabFixedMembers').addEventListener('click', () => switchTab('fixedMembers'));
 
   document.getElementById('prevMonthBtn').addEventListener('click', async () => {
     shiftMonth(-1);

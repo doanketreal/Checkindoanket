@@ -349,6 +349,14 @@ thead th {
   font-weight: 600;
 }
 
+#fixedMemberSummary {
+  font-weight: 600;
+}
+
+#fixedMembersPanel table {
+  min-width: 620px;
+}
+
 @media (max-width: 640px) {
   .container {
     margin-top: 14px;

@@ -1,6 +1,6 @@
 ﻿# Checkin Đoàn Kết
 
-Web chấm công có 3 tab chính sau khi đăng nhập:
+Web chấm công có 4 tab chính sau khi đăng nhập:
 
 ## Tab 1: Lịch & chấm công
 
@@ -32,6 +32,12 @@ Web chấm công có 3 tab chính sau khi đăng nhập:
 - Game hứng cầu bằng phím mũi tên trái/phải.
 - Độ khó tăng mỗi 35 giây.
 - Có bảng xếp hạng điểm cao nhất theo tài khoản đã đăng ký.
+
+## Tab 4: Thành viên cố định
+
+- Hiển thị danh sách tất cả tài khoản thành viên cố định đã đăng ký.
+- Có thống kê tổng số, số Nam, số Nữ.
+- Hiển thị vai trò (Admin hoặc Thành viên).
 
 ## Auth
 

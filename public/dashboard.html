@@ -24,6 +24,7 @@
           <button id="tabCalendar" class="tab active">Tab 1: Lịch & chấm công</button>
           <button id="tabData" class="tab">Tab 2: Data nhập</button>
           <button id="tabGame" class="tab">Tab 3: Game cầu lông</button>
+          <button id="tabFixedMembers" class="tab">Tab 4: Thành viên cố định</button>
         </div>
 
         <div id="calendarPanel" class="tab-panel active">
@@ -212,6 +213,28 @@
                 </tr>
               </thead>
               <tbody id="leaderboardBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="fixedMembersPanel" class="tab-panel">
+          <div class="section-header">
+            <h2>Danh sách thành viên cố định</h2>
+            <p id="fixedMemberSummary" class="muted"></p>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>Họ tên</th>
+                  <th>Username</th>
+                  <th>Giới tính</th>
+                  <th>Vai trò</th>
+                </tr>
+              </thead>
+              <tbody id="fixedMemberBody"></tbody>
             </table>
           </div>
         </div>
