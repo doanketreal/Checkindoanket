@@ -1,4 +1,7 @@
 ﻿{
   "users": {},
-  "attendance": []
+  "attendance": [],
+  "dayConfigs": {},
+  "dataEditors": [],
+  "gameScores": []
 }
