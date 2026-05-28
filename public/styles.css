@@ -22,7 +22,7 @@ body {
 }
 
 .container {
-  max-width: 1080px;
+  max-width: 1120px;
   margin: 24px auto;
   padding: 0 16px 24px;
 }
@@ -42,6 +42,11 @@ h3 {
   color: var(--muted);
 }
 
+.muted {
+  margin: 0;
+  color: var(--muted);
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -49,6 +54,18 @@ h3 {
   padding: 16px;
   margin-top: 16px;
   box-shadow: 0 12px 30px rgba(16, 35, 63, 0.08);
+}
+
+.mini-card {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.hidden {
+  display: none;
 }
 
 .header-card {
@@ -84,6 +101,13 @@ h3 {
   grid-template-columns: 1fr;
 }
 
+.grid-2 {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -91,11 +115,17 @@ label {
   font-weight: 600;
 }
 
-input {
+input,
+select {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 14px;
+  background: #fff;
+}
+
+input[readonly] {
+  background: #f1f5f9;
 }
 
 .actions {
@@ -241,6 +271,20 @@ input {
   font-size: 12px;
 }
 
+.qr-wrap {
+  margin-top: 12px;
+}
+
+.qr-image {
+  width: min(260px, 100%);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.top-gap {
+  margin-top: 14px;
+}
+
 .section-header {
   display: flex;
   align-items: center;
@@ -257,7 +301,7 @@ input {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 740px;
+  min-width: 760px;
 }
 
 th,
@@ -270,6 +314,39 @@ td {
 
 thead th {
   background: #f4f8fe;
+}
+
+.summary-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.summary-grid p {
+  margin: 0;
+}
+
+.summary-total {
+  font-weight: 700;
+}
+
+#gameCanvas {
+  margin-top: 12px;
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fcff;
+}
+
+.game-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-weight: 600;
 }
 
 @media (max-width: 640px) {

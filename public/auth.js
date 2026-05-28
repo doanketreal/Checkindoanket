@@ -59,9 +59,10 @@ function openDashboardWindow() {
 async function handleRegister() {
   const fullName = document.getElementById('registerFullName').value.trim();
   const username = document.getElementById('registerUsername').value.trim();
+  const gender = document.getElementById('registerGender').value;
   const password = document.getElementById('registerPassword').value;
 
-  if (!fullName || !username || !password) {
+  if (!fullName || !username || !password || !gender) {
     setAuthStatus('Vui lòng nhập đầy đủ thông tin đăng ký.', true);
     return;
   }
@@ -71,7 +72,7 @@ async function handleRegister() {
   try {
     const data = await httpJson('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ fullName, username, password })
+      body: JSON.stringify({ fullName, username, gender, password })
     });
 
     setAuthToken(data.token);

@@ -1,4 +1,4 @@
-﻿const http = require('http');
+const http = require('http');
 const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
@@ -12,9 +12,32 @@ const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'attendance.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
+const DAY_INPUT_KEYS = ['SC', 'TC', 'SS', 'TS', 'SB', 'TB', 'SG', 'TG'];
+
+const DEFAULT_DAY_INPUTS = {
+  SC: 0,
+  TC: 0,
+  SS: 0,
+  TS: 0,
+  SB: 0,
+  TB: 0,
+  SG: 0,
+  TG: 0
+};
+
+const DEFAULT_DAY_FORMULAS = {
+  maleFixed: '0',
+  femaleFixed: '0',
+  maleGuest: '0',
+  femaleGuest: '0'
+};
+
 const EMPTY_DB = {
   users: {},
-  attendance: []
+  attendance: [],
+  dayConfigs: {},
+  dataEditors: [],
+  gameScores: []
 };
 
 const CONTENT_TYPES = {
@@ -46,6 +69,20 @@ function usernameKeyFromInput(username) {
 
 function normalizeName(name) {
   return String(name || '').trim();
+}
+
+function normalizeGender(gender) {
+  const value = String(gender || '').trim().toLowerCase();
+
+  if (['male', 'nam', 'm'].includes(value)) {
+    return 'male';
+  }
+
+  if (['female', 'nu', 'nữ', 'f'].includes(value)) {
+    return 'female';
+  }
+
+  return '';
 }
 
 function isValidUsername(username) {
@@ -115,6 +152,28 @@ function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function roundMoney(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.round(value * 100) / 100;
+}
+
+function safeNumber(value) {
+  const raw = String(value ?? '').trim().replace(',', '.');
+  if (!raw) {
+    return 0;
+  }
+
+  const num = Number(raw);
+  if (!Number.isFinite(num)) {
+    return 0;
+  }
+
+  return num;
+}
+
 function getClientIp(req) {
   const forwarded = req.headers['x-forwarded-for'];
 
@@ -130,27 +189,6 @@ function sendJson(res, statusCode, payload) {
     'Content-Type': 'application/json; charset=utf-8'
   });
   res.end(JSON.stringify(payload));
-}
-
-function sanitizeUser(user) {
-  return {
-    id: user.id,
-    username: user.username,
-    fullName: user.fullName,
-    role: user.role,
-    createdAt: user.createdAt
-  };
-}
-
-function sanitizeAttendanceRecord(record) {
-  return {
-    id: record.id,
-    username: record.username,
-    fullName: record.fullName,
-    date: record.date,
-    timestamp: record.timestamp,
-    ip: record.ip
-  };
 }
 
 function hashPassword(password, saltHex) {
@@ -274,8 +312,446 @@ function getAuthenticatedUser(req, db) {
   return db.users[payload.sub] || null;
 }
 
-function getUserRecordForDate(db, usernameKey, dateKey) {
-  return db.attendance.find((record) => record.usernameKey === usernameKey && record.date === dateKey) || null;
+function hasDataInputPermission(user, db) {
+  if (!user) {
+    return false;
+  }
+
+  if (user.role === 'admin') {
+    return true;
+  }
+
+  return db.dataEditors.includes(user.usernameKey);
+}
+
+function sanitizeUser(user, db) {
+  return {
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    gender: user.gender,
+    role: user.role,
+    createdAt: user.createdAt,
+    canInputData: hasDataInputPermission(user, db)
+  };
+}
+
+function sanitizeAttendanceRecord(record) {
+  return {
+    id: record.id,
+    username: record.username,
+    fullName: record.fullName,
+    gender: record.gender,
+    date: record.date,
+    timestamp: record.timestamp,
+    ip: record.ip
+  };
+}
+
+function sanitizeDayInputs(rawInputs) {
+  const inputs = { ...DEFAULT_DAY_INPUTS };
+
+  for (const key of DAY_INPUT_KEYS) {
+    inputs[key] = safeNumber(rawInputs?.[key]);
+  }
+
+  return inputs;
+}
+
+function sanitizeDayFormulas(rawFormulas) {
+  return {
+    maleFixed: String(rawFormulas?.maleFixed || '').trim() || DEFAULT_DAY_FORMULAS.maleFixed,
+    femaleFixed: String(rawFormulas?.femaleFixed || '').trim() || DEFAULT_DAY_FORMULAS.femaleFixed,
+    maleGuest: String(rawFormulas?.maleGuest || '').trim() || DEFAULT_DAY_FORMULAS.maleGuest,
+    femaleGuest: String(rawFormulas?.femaleGuest || '').trim() || DEFAULT_DAY_FORMULAS.femaleGuest
+  };
+}
+
+function sanitizeDayConfig(rawConfig) {
+  const inputs = sanitizeDayInputs(rawConfig?.inputs || {});
+  const formulas = sanitizeDayFormulas(rawConfig?.formulas || {});
+  const charges = {};
+
+  if (rawConfig?.charges && typeof rawConfig.charges === 'object') {
+    for (const [key, value] of Object.entries(rawConfig.charges)) {
+      const usernameKey = usernameKeyFromInput(key);
+      if (!usernameKey) {
+        continue;
+      }
+      charges[usernameKey] = roundMoney(safeNumber(value));
+    }
+  }
+
+  return {
+    inputs,
+    formulas,
+    charges,
+    summary: {
+      NCD: Number(rawConfig?.summary?.NCD || 0),
+      NuCD: Number(rawConfig?.summary?.NuCD || 0),
+      maleFixedAmount: roundMoney(Number(rawConfig?.summary?.maleFixedAmount || 0)),
+      femaleFixedAmount: roundMoney(Number(rawConfig?.summary?.femaleFixedAmount || 0)),
+      maleGuestAmount: roundMoney(Number(rawConfig?.summary?.maleGuestAmount || 0)),
+      femaleGuestAmount: roundMoney(Number(rawConfig?.summary?.femaleGuestAmount || 0)),
+      totalRevenue: roundMoney(Number(rawConfig?.summary?.totalRevenue || 0))
+    },
+    updatedBy: normalizeUsernameInput(rawConfig?.updatedBy || ''),
+    updatedAt: String(rawConfig?.updatedAt || '')
+  };
+}
+
+function tokenizeExpression(expression) {
+  const tokens = [];
+  let i = 0;
+
+  while (i < expression.length) {
+    const ch = expression[i];
+
+    if (/\s/.test(ch)) {
+      i += 1;
+      continue;
+    }
+
+    if (/[0-9.]/.test(ch)) {
+      let start = i;
+      let dotCount = 0;
+
+      while (i < expression.length && /[0-9.]/.test(expression[i])) {
+        if (expression[i] === '.') {
+          dotCount += 1;
+        }
+        i += 1;
+      }
+
+      if (dotCount > 1) {
+        throw new Error('Công thức có số không hợp lệ.');
+      }
+
+      const text = expression.slice(start, i);
+      if (text === '.') {
+        throw new Error('Công thức có số không hợp lệ.');
+      }
+
+      tokens.push({ type: 'number', value: Number(text) });
+      continue;
+    }
+
+    if (/[A-Za-z_]/.test(ch)) {
+      let start = i;
+      i += 1;
+
+      while (i < expression.length && /[A-Za-z0-9_]/.test(expression[i])) {
+        i += 1;
+      }
+
+      const identifier = expression.slice(start, i);
+      tokens.push({ type: 'identifier', value: identifier });
+      continue;
+    }
+
+    if ('+-*/()'.includes(ch)) {
+      tokens.push({
+        type: ch === '(' || ch === ')' ? 'paren' : 'operator',
+        value: ch
+      });
+      i += 1;
+      continue;
+    }
+
+    throw new Error('Công thức chứa ký tự không hợp lệ.');
+  }
+
+  return tokens;
+}
+
+function evaluateArithmeticExpression(expression, scope) {
+  const normalized = String(expression || '').replace(/'([A-Za-z_][A-Za-z0-9_]*)'/g, '$1').trim();
+
+  if (!normalized) {
+    return 0;
+  }
+
+  const tokens = tokenizeExpression(normalized);
+
+  if (!tokens.length) {
+    return 0;
+  }
+
+  const precedence = {
+    '+': 1,
+    '-': 1,
+    '*': 2,
+    '/': 2,
+    'u+': 3,
+    'u-': 3
+  };
+
+  const associativity = {
+    '+': 'left',
+    '-': 'left',
+    '*': 'left',
+    '/': 'left',
+    'u+': 'right',
+    'u-': 'right'
+  };
+
+  const output = [];
+  const ops = [];
+  let prevState = 'start';
+
+  for (const token of tokens) {
+    if (token.type === 'number' || token.type === 'identifier') {
+      output.push(token);
+      prevState = 'value';
+      continue;
+    }
+
+    if (token.type === 'operator') {
+      let op = token.value;
+
+      if ((op === '+' || op === '-') && (prevState === 'start' || prevState === 'operator' || prevState === 'leftParen')) {
+        op = op === '+' ? 'u+' : 'u-';
+      }
+
+      while (ops.length) {
+        const top = ops[ops.length - 1];
+
+        if (top.type !== 'operator') {
+          break;
+        }
+
+        const sameOrHigher =
+          associativity[op] === 'left'
+            ? precedence[op] <= precedence[top.value]
+            : precedence[op] < precedence[top.value];
+
+        if (!sameOrHigher) {
+          break;
+        }
+
+        output.push(ops.pop());
+      }
+
+      ops.push({ type: 'operator', value: op });
+      prevState = 'operator';
+      continue;
+    }
+
+    if (token.type === 'paren' && token.value === '(') {
+      ops.push({ type: 'leftParen', value: '(' });
+      prevState = 'leftParen';
+      continue;
+    }
+
+    if (token.type === 'paren' && token.value === ')') {
+      let foundLeftParen = false;
+
+      while (ops.length) {
+        const top = ops.pop();
+        if (top.type === 'leftParen') {
+          foundLeftParen = true;
+          break;
+        }
+
+        output.push(top);
+      }
+
+      if (!foundLeftParen) {
+        throw new Error('Công thức bị sai dấu ngoặc.');
+      }
+
+      prevState = 'value';
+    }
+  }
+
+  if (prevState === 'operator') {
+    throw new Error('Công thức kết thúc không hợp lệ.');
+  }
+
+  while (ops.length) {
+    const op = ops.pop();
+
+    if (op.type === 'leftParen') {
+      throw new Error('Công thức bị sai dấu ngoặc.');
+    }
+
+    output.push(op);
+  }
+
+  const stack = [];
+
+  for (const token of output) {
+    if (token.type === 'number') {
+      stack.push(token.value);
+      continue;
+    }
+
+    if (token.type === 'identifier') {
+      const direct = scope[token.value];
+      const upper = scope[token.value.toUpperCase()];
+      const lower = scope[token.value.toLowerCase()];
+      const variableValue = direct ?? upper ?? lower;
+
+      if (variableValue === undefined) {
+        throw new Error(`Biến ${token.value} không tồn tại trong công thức.`);
+      }
+
+      stack.push(Number(variableValue));
+      continue;
+    }
+
+    if (token.type === 'operator') {
+      if (token.value === 'u+' || token.value === 'u-') {
+        if (!stack.length) {
+          throw new Error('Công thức thiếu toán hạng.');
+        }
+
+        const value = stack.pop();
+        stack.push(token.value === 'u-' ? -value : value);
+        continue;
+      }
+
+      if (stack.length < 2) {
+        throw new Error('Công thức thiếu toán hạng.');
+      }
+
+      const b = stack.pop();
+      const a = stack.pop();
+      let result = 0;
+
+      if (token.value === '+') {
+        result = a + b;
+      }
+
+      if (token.value === '-') {
+        result = a - b;
+      }
+
+      if (token.value === '*') {
+        result = a * b;
+      }
+
+      if (token.value === '/') {
+        if (b === 0) {
+          throw new Error('Công thức chia cho 0.');
+        }
+
+        result = a / b;
+      }
+
+      if (!Number.isFinite(result)) {
+        throw new Error('Công thức cho kết quả không hợp lệ.');
+      }
+
+      stack.push(result);
+    }
+  }
+
+  if (stack.length !== 1) {
+    throw new Error('Công thức không hợp lệ.');
+  }
+
+  return stack[0];
+}
+
+function getAttendanceForDate(db, date) {
+  return db.attendance
+    .filter((record) => record.date === date)
+    .sort((a, b) => {
+      const fullNameCompare = a.fullName.localeCompare(b.fullName, 'vi');
+      if (fullNameCompare !== 0) {
+        return fullNameCompare;
+      }
+      return a.username.localeCompare(b.username, 'vi');
+    });
+}
+
+function getGenderCounts(records) {
+  let NCD = 0;
+  let NuCD = 0;
+
+  for (const item of records) {
+    if (item.gender === 'female') {
+      NuCD += 1;
+    } else {
+      NCD += 1;
+    }
+  }
+
+  return { NCD, NuCD };
+}
+
+function calculateDayFinancials(inputs, formulas, records) {
+  const sanitizedInputs = sanitizeDayInputs(inputs);
+  const sanitizedFormulas = sanitizeDayFormulas(formulas);
+  const counts = getGenderCounts(records);
+
+  const scope = {
+    SC: sanitizedInputs.SC,
+    TC: sanitizedInputs.TC,
+    SS: sanitizedInputs.SS,
+    TS: sanitizedInputs.TS,
+    SB: sanitizedInputs.SB,
+    TB: sanitizedInputs.TB,
+    SG: sanitizedInputs.SG,
+    TG: sanitizedInputs.TG,
+    NCD: counts.NCD,
+    NuCD: counts.NuCD
+  };
+
+  const maleFixedAmount = roundMoney(evaluateArithmeticExpression(sanitizedFormulas.maleFixed, scope));
+  const femaleFixedAmount = roundMoney(evaluateArithmeticExpression(sanitizedFormulas.femaleFixed, scope));
+  const maleGuestAmount = roundMoney(evaluateArithmeticExpression(sanitizedFormulas.maleGuest, scope));
+  const femaleGuestAmount = roundMoney(evaluateArithmeticExpression(sanitizedFormulas.femaleGuest, scope));
+
+  const charges = {};
+
+  for (const attendee of records) {
+    charges[attendee.usernameKey] = attendee.gender === 'female' ? femaleFixedAmount : maleFixedAmount;
+  }
+
+  const totalRevenue = roundMoney(
+    maleFixedAmount * counts.NCD +
+      femaleFixedAmount * counts.NuCD +
+      maleGuestAmount * sanitizedInputs.SB +
+      femaleGuestAmount * sanitizedInputs.SG
+  );
+
+  return {
+    inputs: sanitizedInputs,
+    formulas: sanitizedFormulas,
+    charges,
+    summary: {
+      NCD: counts.NCD,
+      NuCD: counts.NuCD,
+      maleFixedAmount,
+      femaleFixedAmount,
+      maleGuestAmount,
+      femaleGuestAmount,
+      totalRevenue
+    }
+  };
+}
+
+function buildCalendarDays(db, user, monthKey) {
+  const daysInMonth = getDaysInMonth(monthKey);
+  const result = [];
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${monthKey}-${String(day).padStart(2, '0')}`;
+    const checkedRecord = db.attendance.find(
+      (record) => record.date === date && record.usernameKey === user.usernameKey
+    );
+
+    result.push({
+      date,
+      checked: Boolean(checkedRecord),
+      recordId: checkedRecord?.id || null,
+      checkedAt: checkedRecord?.timestamp || null
+    });
+  }
+
+  return result;
 }
 
 function convertLegacyAttendanceIfNeeded(parsed) {
@@ -313,6 +789,7 @@ function convertLegacyAttendanceIfNeeded(parsed) {
       usernameKey,
       username,
       fullName: normalizeName(item.employeeName || item.fullName || ''),
+      gender: normalizeGender(item.gender) || 'male',
       date,
       timestamp: item.timestamp,
       ip: item.ip || 'unknown'
@@ -353,17 +830,22 @@ async function readDb() {
       continue;
     }
 
+    const normalizedGender = normalizeGender(rawUser?.gender) || 'male';
+
     users[normalizedKey] = {
       ...rawUser,
       username: inferredUsername,
       usernameKey: normalizedKey,
-      fullName: normalizeName(rawUser?.fullName || rawUser?.employeeName || inferredUsername)
+      fullName: normalizeName(rawUser?.fullName || rawUser?.employeeName || inferredUsername),
+      gender: normalizedGender,
+      role: rawUser?.role === 'admin' ? 'admin' : 'member'
     };
   }
 
   const attendanceRaw = Array.isArray(parsed.attendance)
     ? parsed.attendance
     : convertLegacyAttendanceIfNeeded(parsed);
+
   const attendance = attendanceRaw
     .map((item) => {
       const username = normalizeUsernameInput(item?.username);
@@ -374,11 +856,14 @@ async function readDb() {
         return null;
       }
 
+      const gender = normalizeGender(item?.gender || users[usernameKey]?.gender) || 'male';
+
       return {
         id: String(item.id || generateId()),
         usernameKey,
-        username,
-        fullName: normalizeName(item?.fullName || username),
+        username: username || users[usernameKey]?.username || usernameKey,
+        fullName: normalizeName(item?.fullName || users[usernameKey]?.fullName || username),
+        gender,
         date,
         timestamp: item?.timestamp || new Date().toISOString(),
         ip: item?.ip || 'unknown'
@@ -386,9 +871,57 @@ async function readDb() {
     })
     .filter(Boolean);
 
+  const dayConfigsRaw = parsed.dayConfigs && typeof parsed.dayConfigs === 'object' ? parsed.dayConfigs : {};
+  const dayConfigs = {};
+
+  for (const [dateKey, rawConfig] of Object.entries(dayConfigsRaw)) {
+    const normalizedDate = normalizeDateKey(dateKey);
+    if (!normalizedDate) {
+      continue;
+    }
+
+    dayConfigs[normalizedDate] = sanitizeDayConfig(rawConfig);
+  }
+
+  const dataEditorsRaw = Array.isArray(parsed.dataEditors) ? parsed.dataEditors : [];
+  const dataEditors = Array.from(
+    new Set(
+      dataEditorsRaw
+        .map((item) => usernameKeyFromInput(item))
+        .filter((item) => item && users[item] && users[item].role !== 'admin')
+    )
+  );
+
+  const gameScoresRaw = Array.isArray(parsed.gameScores) ? parsed.gameScores : [];
+  const gameScores = gameScoresRaw
+    .map((item) => {
+      const usernameKey = usernameKeyFromInput(item?.usernameKey || item?.username);
+      if (!usernameKey) {
+        return null;
+      }
+
+      const scoreValue = Number(item?.score);
+      if (!Number.isFinite(scoreValue) || scoreValue < 0) {
+        return null;
+      }
+
+      return {
+        id: String(item.id || generateId()),
+        usernameKey,
+        username: normalizeUsernameInput(item?.username || users[usernameKey]?.username || usernameKey),
+        fullName: normalizeName(item?.fullName || users[usernameKey]?.fullName || usernameKey),
+        score: Math.floor(scoreValue),
+        createdAt: item?.createdAt || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+
   return {
     users,
-    attendance
+    attendance,
+    dayConfigs,
+    dataEditors,
+    gameScores
   };
 }
 
@@ -437,23 +970,13 @@ function requireAuth(req, res, db) {
   return user;
 }
 
-function buildCalendarDays(db, user, monthKey) {
-  const daysInMonth = getDaysInMonth(monthKey);
-  const result = [];
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const date = `${monthKey}-${String(day).padStart(2, '0')}`;
-    const existing = getUserRecordForDate(db, user.usernameKey, date);
-
-    result.push({
-      date,
-      checked: Boolean(existing),
-      recordId: existing?.id || null,
-      checkedAt: existing?.timestamp || null
-    });
+function requireAdmin(user, res) {
+  if (user?.role === 'admin') {
+    return true;
   }
 
-  return result;
+  sendJson(res, 403, { error: 'Chỉ quản trị viên mới có quyền thực hiện thao tác này.' });
+  return false;
 }
 
 async function handleApi(req, res, requestUrl) {
@@ -471,6 +994,7 @@ async function handleApi(req, res, requestUrl) {
       const usernameKey = usernameKeyFromInput(body.username);
       const fullName = normalizeName(body.fullName);
       const password = String(body.password || '');
+      const gender = normalizeGender(body.gender);
 
       if (!isValidFullName(fullName)) {
         sendJson(res, 400, { error: 'Vui lòng nhập họ tên từ 2 đến 80 ký tự.' });
@@ -489,6 +1013,11 @@ async function handleApi(req, res, requestUrl) {
         return true;
       }
 
+      if (!gender) {
+        sendJson(res, 400, { error: 'Vui lòng chọn giới tính Nam hoặc Nữ.' });
+        return true;
+      }
+
       const db = await readDb();
 
       if (db.users[usernameKey]) {
@@ -503,6 +1032,7 @@ async function handleApi(req, res, requestUrl) {
         username: usernameInput,
         usernameKey,
         fullName,
+        gender,
         passwordSalt: salt,
         passwordHash: hash,
         role,
@@ -516,7 +1046,7 @@ async function handleApi(req, res, requestUrl) {
       sendJson(res, 201, {
         message: 'Đăng ký thành công.',
         token,
-        user: sanitizeUser(newUser)
+        user: sanitizeUser(newUser, db)
       });
       return true;
     } catch (error) {
@@ -548,7 +1078,7 @@ async function handleApi(req, res, requestUrl) {
       sendJson(res, 200, {
         message: 'Đăng nhập thành công.',
         token,
-        user: sanitizeUser(user)
+        user: sanitizeUser(user, db)
       });
       return true;
     } catch (error) {
@@ -612,7 +1142,7 @@ async function handleApi(req, res, requestUrl) {
         return true;
       }
 
-      sendJson(res, 200, { user: sanitizeUser(user) });
+      sendJson(res, 200, { user: sanitizeUser(user, db) });
       return true;
     } catch {
       sendJson(res, 500, { error: 'Không thể tải thông tin tài khoản.' });
@@ -646,7 +1176,7 @@ async function handleApi(req, res, requestUrl) {
     }
   }
 
-  if (pathname === '/api/attendance' && req.method === 'GET') {
+  if (pathname === '/api/attendance/day' && req.method === 'GET') {
     try {
       const db = await readDb();
       const user = requireAuth(req, res, db);
@@ -657,29 +1187,27 @@ async function handleApi(req, res, requestUrl) {
 
       const date = normalizeDateKey(requestUrl.searchParams.get('date'));
 
-      let records = db.attendance.slice();
-
-      if (user.role !== 'admin') {
-        records = records.filter((record) => record.usernameKey === user.usernameKey);
+      if (!date) {
+        sendJson(res, 400, { error: 'Ngày không hợp lệ (YYYY-MM-DD).' });
+        return true;
       }
 
-      if (date) {
-        records = records.filter((record) => record.date === date);
-      }
+      const records = getAttendanceForDate(db, date);
+      const dayConfig = sanitizeDayConfig(db.dayConfigs[date] || {});
 
-      records.sort((a, b) => {
-        const timeDiff = new Date(b.timestamp) - new Date(a.timestamp);
-        if (timeDiff !== 0) {
-          return timeDiff;
-        }
+      const withCharges = records.map((record) => ({
+        ...sanitizeAttendanceRecord(record),
+        charge: roundMoney(Number(dayConfig.charges[record.usernameKey] || 0))
+      }));
 
-        return b.date.localeCompare(a.date);
+      sendJson(res, 200, {
+        date,
+        records: withCharges,
+        summary: dayConfig.summary
       });
-
-      sendJson(res, 200, { records: records.map(sanitizeAttendanceRecord) });
       return true;
     } catch {
-      sendJson(res, 500, { error: 'Không thể tải danh sách chấm công.' });
+      sendJson(res, 500, { error: 'Không thể tải danh sách chấm công theo ngày.' });
       return true;
     }
   }
@@ -701,10 +1229,12 @@ async function handleApi(req, res, requestUrl) {
         return true;
       }
 
-      const existing = getUserRecordForDate(db, user.usernameKey, date);
+      const exists = db.attendance.find(
+        (record) => record.usernameKey === user.usernameKey && record.date === date
+      );
 
-      if (existing) {
-        sendJson(res, 409, { error: 'Ngày này đã được chấm công rồi.' });
+      if (exists) {
+        sendJson(res, 409, { error: 'Bạn đã chấm công cho ngày này rồi.' });
         return true;
       }
 
@@ -713,6 +1243,7 @@ async function handleApi(req, res, requestUrl) {
         usernameKey: user.usernameKey,
         username: user.username,
         fullName: user.fullName,
+        gender: user.gender,
         date,
         timestamp: new Date().toISOString(),
         ip: getClientIp(req)
@@ -729,9 +1260,8 @@ async function handleApi(req, res, requestUrl) {
     }
   }
 
-  const deleteMatch = pathname.match(/^\/api\/attendance\/([^/]+)$/);
-
-  if (deleteMatch && req.method === 'DELETE') {
+  const deleteAttendanceMatch = pathname.match(/^\/api\/attendance\/([^/]+)$/);
+  if (deleteAttendanceMatch && req.method === 'DELETE') {
     try {
       const db = await readDb();
       const user = requireAuth(req, res, db);
@@ -740,7 +1270,7 @@ async function handleApi(req, res, requestUrl) {
         return true;
       }
 
-      const recordId = decodeURIComponent(deleteMatch[1]);
+      const recordId = decodeURIComponent(deleteAttendanceMatch[1]);
       const index = db.attendance.findIndex((record) => record.id === recordId);
 
       if (index < 0) {
@@ -762,6 +1292,283 @@ async function handleApi(req, res, requestUrl) {
       return true;
     } catch (error) {
       sendJson(res, 500, { error: error.message || 'Không thể xoá chấm công.' });
+      return true;
+    }
+  }
+
+  if (pathname === '/api/day-data' && req.method === 'GET') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+      if (!user) {
+        return true;
+      }
+
+      const date = normalizeDateKey(requestUrl.searchParams.get('date'));
+      if (!date) {
+        sendJson(res, 400, { error: 'Ngày không hợp lệ (YYYY-MM-DD).' });
+        return true;
+      }
+
+      const records = getAttendanceForDate(db, date);
+      const counts = getGenderCounts(records);
+      const config = sanitizeDayConfig(db.dayConfigs[date] || {});
+
+      sendJson(res, 200, {
+        date,
+        hasInputPermission: hasDataInputPermission(user, db),
+        canManageEditors: user.role === 'admin',
+        inputs: config.inputs,
+        formulas: config.formulas,
+        summary: {
+          ...config.summary,
+          NCD: counts.NCD,
+          NuCD: counts.NuCD
+        }
+      });
+      return true;
+    } catch {
+      sendJson(res, 500, { error: 'Không thể tải dữ liệu nhập cho ngày này.' });
+      return true;
+    }
+  }
+
+  if (pathname === '/api/day-data/calculate' && req.method === 'POST') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+
+      if (!user) {
+        return true;
+      }
+
+      if (!hasDataInputPermission(user, db)) {
+        sendJson(res, 403, { error: 'Bạn không có quyền nhập dữ liệu tính tiền.' });
+        return true;
+      }
+
+      const body = await readRequestBody(req);
+      const date = normalizeDateKey(body.date);
+
+      if (!date) {
+        sendJson(res, 400, { error: 'Ngày không hợp lệ (YYYY-MM-DD).' });
+        return true;
+      }
+
+      const inputs = sanitizeDayInputs(body.inputs || {});
+      const formulas = sanitizeDayFormulas(body.formulas || {});
+      const records = getAttendanceForDate(db, date);
+
+      const computed = calculateDayFinancials(inputs, formulas, records);
+      const config = {
+        inputs: computed.inputs,
+        formulas: computed.formulas,
+        charges: computed.charges,
+        summary: computed.summary,
+        updatedBy: user.username,
+        updatedAt: new Date().toISOString()
+      };
+
+      db.dayConfigs[date] = config;
+      await writeDb(db);
+
+      sendJson(res, 200, {
+        message: 'Đã tính và lưu dữ liệu thành công.',
+        date,
+        config
+      });
+      return true;
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || 'Không thể tính dữ liệu.' });
+      return true;
+    }
+  }
+
+  if (pathname === '/api/data-editors' && req.method === 'GET') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+      if (!user) {
+        return true;
+      }
+
+      const editors = db.dataEditors
+        .map((key) => db.users[key])
+        .filter(Boolean)
+        .map((item) => ({
+          username: item.username,
+          fullName: item.fullName,
+          gender: item.gender
+        }));
+
+      const users = Object.values(db.users).map((item) => ({
+        username: item.username,
+        fullName: item.fullName,
+        gender: item.gender,
+        role: item.role
+      }));
+
+      sendJson(res, 200, {
+        canManageEditors: user.role === 'admin',
+        hasInputPermission: hasDataInputPermission(user, db),
+        editors,
+        users
+      });
+      return true;
+    } catch {
+      sendJson(res, 500, { error: 'Không thể tải danh sách quyền nhập dữ liệu.' });
+      return true;
+    }
+  }
+
+  if (pathname === '/api/data-editors' && req.method === 'POST') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+
+      if (!user) {
+        return true;
+      }
+
+      if (!requireAdmin(user, res)) {
+        return true;
+      }
+
+      const body = await readRequestBody(req);
+      const editorKey = usernameKeyFromInput(body.username);
+
+      if (!editorKey) {
+        sendJson(res, 400, { error: 'Vui lòng nhập username hợp lệ.' });
+        return true;
+      }
+
+      const targetUser = db.users[editorKey];
+
+      if (!targetUser) {
+        sendJson(res, 404, { error: 'Không tìm thấy tài khoản để cấp quyền.' });
+        return true;
+      }
+
+      if (targetUser.role === 'admin') {
+        sendJson(res, 409, { error: 'Tài khoản admin đã có quyền nhập sẵn.' });
+        return true;
+      }
+
+      if (!db.dataEditors.includes(editorKey)) {
+        db.dataEditors.push(editorKey);
+      }
+
+      await writeDb(db);
+
+      sendJson(res, 200, { message: `Đã cấp quyền nhập dữ liệu cho ${targetUser.username}.` });
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Không thể cấp quyền.' });
+      return true;
+    }
+  }
+
+  const deleteEditorMatch = pathname.match(/^\/api\/data-editors\/([^/]+)$/);
+  if (deleteEditorMatch && req.method === 'DELETE') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+      if (!user) {
+        return true;
+      }
+
+      if (!requireAdmin(user, res)) {
+        return true;
+      }
+
+      const editorKey = usernameKeyFromInput(decodeURIComponent(deleteEditorMatch[1]));
+      const before = db.dataEditors.length;
+      db.dataEditors = db.dataEditors.filter((item) => item !== editorKey);
+
+      if (db.dataEditors.length === before) {
+        sendJson(res, 404, { error: 'Không tìm thấy người được cấp quyền này.' });
+        return true;
+      }
+
+      await writeDb(db);
+      sendJson(res, 200, { message: 'Đã xoá quyền nhập dữ liệu.' });
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Không thể xoá quyền.' });
+      return true;
+    }
+  }
+
+  if (pathname === '/api/game/leaderboard' && req.method === 'GET') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+
+      if (!user) {
+        return true;
+      }
+
+      const bestByUser = new Map();
+
+      for (const score of db.gameScores) {
+        const current = bestByUser.get(score.usernameKey);
+
+        if (!current || score.score > current.score) {
+          bestByUser.set(score.usernameKey, score);
+        }
+      }
+
+      const leaderboard = Array.from(bestByUser.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20)
+        .map((item) => ({
+          username: item.username,
+          fullName: item.fullName,
+          score: item.score,
+          createdAt: item.createdAt
+        }));
+
+      sendJson(res, 200, { leaderboard });
+      return true;
+    } catch {
+      sendJson(res, 500, { error: 'Không thể tải bảng xếp hạng.' });
+      return true;
+    }
+  }
+
+  if (pathname === '/api/game/score' && req.method === 'POST') {
+    try {
+      const db = await readDb();
+      const user = requireAuth(req, res, db);
+
+      if (!user) {
+        return true;
+      }
+
+      const body = await readRequestBody(req);
+      const score = Math.floor(Number(body.score));
+
+      if (!Number.isFinite(score) || score < 0 || score > 1000000) {
+        sendJson(res, 400, { error: 'Điểm số không hợp lệ.' });
+        return true;
+      }
+
+      const entry = {
+        id: generateId(),
+        usernameKey: user.usernameKey,
+        username: user.username,
+        fullName: user.fullName,
+        score,
+        createdAt: new Date().toISOString()
+      };
+
+      db.gameScores.push(entry);
+      await writeDb(db);
+
+      sendJson(res, 201, { message: 'Đã lưu điểm thành công.' });
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Không thể lưu điểm.' });
       return true;
     }
   }

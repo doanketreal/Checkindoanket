@@ -1,18 +1,43 @@
 ﻿# Checkin Đoàn Kết
 
-Ứng dụng chấm công theo **ngày trên lịch**.
+Web chấm công có 3 tab chính sau khi đăng nhập:
 
-## Tính năng chính
+## Tab 1: Lịch & chấm công
 
-- Đăng ký tài khoản (không dùng mã nhân viên).
-- Đăng nhập và mở cửa sổ chấm công mới (`dashboard.html`).
-- Quên mật khẩu bằng mã đặt lại: `doanketreal`.
-- Tab 1: Lịch theo tháng, chọn ngày để chấm công.
-- Có thể xoá chấm công khi thao tác nhầm.
-- Tab 2: Danh sách các lần đã chấm.
-- Phân quyền:
-  - `admin`: xem và xoá tất cả bản ghi.
-  - `member`: chỉ xem/xoá bản ghi của chính mình.
+- Chọn ngày trên lịch.
+- Bấm chấm công cho ngày đã chọn.
+- Nếu chấm nhầm có thể xoá chấm công.
+- Hiển thị danh sách người đã chấm trong ngày.
+- Hiển thị số tiền phải trả bên cạnh từng người (sau khi tính ở Tab 2).
+- Hiển thị tổng thu trong ngày.
+- Có nút hiện mã QR (`public/qr.jpg`).
+
+## Tab 2: Data nhập
+
+- Chỉ `admin` hoặc người được admin cấp quyền mới được nhập.
+- Admin có dòng thêm/xoá người được phép nhập.
+- Nhập các biến:
+  - `SC`, `TC`, `SS`, `TS`, `SB`, `TB`, `SG`, `TG`
+- Nhập công thức:
+  - Nam cố định
+  - Nữ cố định
+  - Nam giao lưu
+  - Nữ giao lưu
+- Công thức hỗ trợ `+ - * /` và biến (ví dụ `SC`, `TG`, `NCD`, `NuCD`, hoặc `'TG'`).
+- `NCD` và `NuCD` tự tính từ danh sách chấm công theo giới tính.
+- Bấm `Tính và lưu` để ghi tiền phải trả cho từng người trong Tab 1.
+
+## Tab 3: Game cầu lông
+
+- Game hứng cầu bằng phím mũi tên trái/phải.
+- Độ khó tăng mỗi 35 giây.
+- Có bảng xếp hạng điểm cao nhất theo tài khoản đã đăng ký.
+
+## Auth
+
+- Đăng ký gồm: Họ tên, Username, Mật khẩu, Giới tính (Nam/Nữ).
+- Đăng nhập mở cửa sổ mới `dashboard.html`.
+- Quên mật khẩu: nhập mã `doanketreal` để đổi.
 
 ## Chạy local
 
@@ -20,44 +45,23 @@
 node server.js
 ```
 
-Mặc định:
+App chạy mặc định ở:
 - `http://localhost:3000`
 
 ## Biến môi trường
 
 - `PORT`
 - `AUTH_SECRET`
-- `RESET_PASSWORD_CODE` (mặc định là `doanketreal`)
+- `RESET_PASSWORD_CODE` (mặc định: `doanketreal`)
 
-Ví dụ:
+## Dữ liệu lưu
 
-```bash
-AUTH_SECRET=mot-chuoi-bi-mat-rat-dai
-RESET_PASSWORD_CODE=doanketreal
-```
+File:
+- `data/attendance.json`
 
-## API chính
-
-### Auth
-
-- `POST /api/auth/register`
-  - body: `{ "fullName": "Nguyễn Văn A", "username": "nguyenvana", "password": "123456" }`
-- `POST /api/auth/login`
-  - body: `{ "username": "nguyenvana", "password": "123456" }`
-- `POST /api/auth/reset-password`
-  - body: `{ "username": "nguyenvana", "resetCode": "doanketreal", "newPassword": "654321" }`
-- `GET /api/auth/me`
-  - header: `Authorization: Bearer <token>`
-
-### Attendance
-
-- `GET /api/attendance/calendar?month=2026-05`
-- `GET /api/attendance?date=2026-05-28`
-- `POST /api/attendance`
-  - body: `{ "date": "2026-05-28" }`
-- `DELETE /api/attendance/<recordId>`
-
-## Lưu ý
-
-- Dữ liệu lưu trong `data/attendance.json`.
-- Nếu deploy gói Free trên Render, cần chú ý hạn chế lưu trữ lâu dài của filesystem.
+Cấu trúc chính:
+- `users`
+- `attendance`
+- `dayConfigs`
+- `dataEditors`
+- `gameScores`

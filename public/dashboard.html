@@ -21,8 +21,9 @@
 
       <section class="card">
         <div class="tabs">
-          <button id="tabCalendar" class="tab active">Tab 1: Lịch chấm công</button>
-          <button id="tabHistory" class="tab">Tab 2: Danh sách đã chấm</button>
+          <button id="tabCalendar" class="tab active">Tab 1: Lịch & chấm công</button>
+          <button id="tabData" class="tab">Tab 2: Data nhập</button>
+          <button id="tabGame" class="tab">Tab 3: Game cầu lông</button>
         </div>
 
         <div id="calendarPanel" class="tab-panel active">
@@ -37,27 +38,180 @@
           <div class="actions">
             <button id="markAttendanceBtn" class="btn success" disabled>Chấm công ngày đã chọn</button>
             <button id="deleteAttendanceBtn" class="btn warning" disabled>Xoá chấm công ngày đã chọn</button>
+            <button id="toggleQrBtn" class="btn ghost">Hiện mã QR</button>
           </div>
-        </div>
 
-        <div id="historyPanel" class="tab-panel">
-          <div class="section-header">
-            <h2>Danh sách đã chấm</h2>
-            <input id="historyDateFilter" type="date" />
+          <div id="qrWrap" class="qr-wrap hidden">
+            <img src="/qr.jpg" alt="Mã QR" class="qr-image" />
           </div>
+
+          <div class="section-header top-gap">
+            <h2>Danh sách đã chấm theo ngày</h2>
+            <p id="selectedDateLabel" class="muted"></p>
+          </div>
+
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Ngày</th>
                   <th>Họ tên</th>
                   <th>Username</th>
+                  <th>Giới tính</th>
                   <th>Thời gian chấm</th>
-                  <th>IP</th>
+                  <th>Phải trả (VNĐ)</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
-              <tbody id="historyBody"></tbody>
+              <tbody id="dayAttendanceBody"></tbody>
+            </table>
+          </div>
+
+          <p id="dayTotalRevenue" class="status">Tổng thu ngày: 0 VNĐ</p>
+        </div>
+
+        <div id="dataPanel" class="tab-panel">
+          <div class="section-header">
+            <h2>Data nhập theo ngày đang chọn</h2>
+            <p id="dataPermissionLabel" class="muted"></p>
+          </div>
+
+          <section class="mini-card" id="editorManageCard">
+            <h3>Admin: thêm người được phép nhập dữ liệu</h3>
+            <div class="actions">
+              <input id="editorUsernameInput" type="text" placeholder="Nhập username cần cấp quyền" />
+              <button id="addEditorBtn" class="btn primary">Thêm quyền</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Họ tên</th>
+                    <th>Giới tính</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="editorListBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="mini-card">
+            <h3>Biến đầu vào</h3>
+            <div class="grid-2">
+              <label>
+                Số cầu đánh (SC)
+                <input id="inputSC" type="number" min="0" step="1" />
+              </label>
+              <label>
+                Tiền 1 quả cầu (TC) VNĐ
+                <input id="inputTC" type="number" min="0" step="1000" />
+              </label>
+              <label>
+                Số sân đánh 1 buổi (SS)
+                <input id="inputSS" type="number" min="0" step="1" />
+              </label>
+              <label>
+                Tiền 1 sân (TS) VNĐ
+                <input id="inputTS" type="number" min="0" step="1000" />
+              </label>
+              <label>
+                Số nam giao lưu (SB)
+                <input id="inputSB" type="number" min="0" step="1" />
+              </label>
+              <label>
+                Tiền 1 nam giao lưu (TB) VNĐ
+                <input id="inputTB" type="number" min="0" step="1000" />
+              </label>
+              <label>
+                Số nữ giao lưu (SG)
+                <input id="inputSG" type="number" min="0" step="1" />
+              </label>
+              <label>
+                Tiền 1 nữ giao lưu (TG) VNĐ
+                <input id="inputTG" type="number" min="0" step="1000" />
+              </label>
+            </div>
+
+            <div class="grid-2 top-gap">
+              <label>
+                Số nam cố định (NCD)
+                <input id="countNCD" type="number" readonly />
+              </label>
+              <label>
+                Số nữ cố định (NuCD)
+                <input id="countNuCD" type="number" readonly />
+              </label>
+            </div>
+          </section>
+
+          <section class="mini-card">
+            <h3>Công thức</h3>
+            <p class="hint">Hỗ trợ + - * / và biến như SC, TC, SB, TG, NCD, NuCD (có thể nhập cả dạng 'TG').</p>
+            <div class="grid single-col">
+              <label>
+                Nam cố định
+                <input id="formulaMaleFixed" type="text" placeholder="Ví dụ: (SC*TC + SS*TS) / NCD" />
+              </label>
+              <label>
+                Nữ cố định
+                <input id="formulaFemaleFixed" type="text" placeholder="Ví dụ: (SC*TC + SS*TS) / NuCD" />
+              </label>
+              <label>
+                Nam giao lưu
+                <input id="formulaMaleGuest" type="text" placeholder="Ví dụ: TB + (SS*TS)/SB" />
+              </label>
+              <label>
+                Nữ giao lưu
+                <input id="formulaFemaleGuest" type="text" placeholder="Ví dụ: TG + (SS*TS)/SG" />
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="calculateDayBtn" class="btn success">Tính và lưu</button>
+            </div>
+
+            <div class="summary-grid">
+              <p>Tiền Nam cố định: <strong id="sumMaleFixed">0</strong> VNĐ</p>
+              <p>Tiền Nữ cố định: <strong id="sumFemaleFixed">0</strong> VNĐ</p>
+              <p>Tiền Nam giao lưu: <strong id="sumMaleGuest">0</strong> VNĐ</p>
+              <p>Tiền Nữ giao lưu: <strong id="sumFemaleGuest">0</strong> VNĐ</p>
+              <p class="summary-total">Tổng thu: <strong id="sumTotal">0</strong> VNĐ</p>
+            </div>
+          </section>
+        </div>
+
+        <div id="gamePanel" class="tab-panel">
+          <div class="section-header">
+            <h2>Game cầu lông: Hứng cầu</h2>
+            <p class="muted">Độ khó tăng sau mỗi 35 giây.</p>
+          </div>
+
+          <div class="actions">
+            <button id="startGameBtn" class="btn primary">Bắt đầu / Chơi lại</button>
+            <p id="gameInfo" class="muted"></p>
+          </div>
+
+          <div class="game-meta">
+            <span>Điểm: <strong id="gameScore">0</strong></span>
+            <span>Thời gian: <strong id="gameTime">0</strong>s</span>
+            <span>Cấp độ: <strong id="gameLevel">1</strong></span>
+          </div>
+
+          <canvas id="gameCanvas" width="640" height="320"></canvas>
+
+          <h3 class="top-gap">Bảng xếp hạng cao nhất</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Hạng</th>
+                  <th>Họ tên</th>
+                  <th>Username</th>
+                  <th>Điểm</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboardBody"></tbody>
             </table>
           </div>
         </div>
