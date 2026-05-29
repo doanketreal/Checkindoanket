@@ -11,6 +11,12 @@ const TOKEN_EXPIRES_SECONDS = 60 * 60 * 24 * 30;
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'attendance.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const DATABASE_URL = String(process.env.DATABASE_URL || process.env.POSTGRES_URL || '').trim();
+const DATABASE_SSL = String(process.env.DATABASE_SSL || '').trim().toLowerCase();
+const POSTGRES_STATE_TABLE = 'attendance_app_state';
+
+let pgPool = null;
+let storageReadyPromise = null;
 
 const DAY_INPUT_KEYS = ['SC', 'TC', 'SS', 'TS', 'SB', 'TB', 'SG', 'TG'];
 
@@ -808,17 +814,85 @@ async function ensureDataFile() {
   }
 }
 
-async function readDb() {
-  await ensureDataFile();
-  const raw = await fs.readFile(DATA_FILE, 'utf8');
-  const normalizedRaw = raw.replace(/^\uFEFF/, '');
+function cloneEmptyDb() {
+  return JSON.parse(JSON.stringify(EMPTY_DB));
+}
 
-  if (!normalizedRaw.trim()) {
-    return { ...EMPTY_DB };
+function getPostgresPool() {
+  if (!DATABASE_URL) {
+    return null;
   }
 
-  const parsed = JSON.parse(normalizedRaw);
-  const usersRaw = parsed.users && typeof parsed.users === 'object' ? parsed.users : {};
+  if (!pgPool) {
+    const { Pool } = require('pg');
+    const poolOptions = {
+      connectionString: DATABASE_URL
+    };
+
+    if (DATABASE_SSL === 'true' || DATABASE_URL.includes('sslmode=require')) {
+      poolOptions.ssl = { rejectUnauthorized: false };
+    }
+
+    if (DATABASE_SSL === 'false') {
+      poolOptions.ssl = false;
+    }
+
+    pgPool = new Pool(poolOptions);
+  }
+
+  return pgPool;
+}
+
+async function ensurePostgresStorage() {
+  const pool = getPostgresPool();
+  if (!pool) {
+    return;
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ${POSTGRES_STATE_TABLE} (
+      id integer PRIMARY KEY,
+      data jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+
+  await pool.query(
+    `
+    INSERT INTO ${POSTGRES_STATE_TABLE} (id, data)
+    VALUES (1, $1::jsonb)
+    ON CONFLICT (id) DO NOTHING
+  `,
+    [JSON.stringify(await getInitialPostgresData())]
+  );
+}
+
+async function getInitialPostgresData() {
+  try {
+    const raw = await fs.readFile(DATA_FILE, 'utf8');
+    const normalizedRaw = raw.replace(/^\uFEFF/, '');
+    return normalizedRaw.trim() ? normalizeDb(JSON.parse(normalizedRaw)) : cloneEmptyDb();
+  } catch {
+    return cloneEmptyDb();
+  }
+}
+
+async function ensureStorage() {
+  if (!storageReadyPromise) {
+    storageReadyPromise = DATABASE_URL ? ensurePostgresStorage() : ensureDataFile();
+  }
+
+  try {
+    await storageReadyPromise;
+  } catch (error) {
+    storageReadyPromise = null;
+    throw error;
+  }
+}
+
+function normalizeDb(parsed) {
+  const source = parsed && typeof parsed === 'object' ? parsed : cloneEmptyDb();
+  const usersRaw = source.users && typeof source.users === 'object' ? source.users : {};
   const users = {};
 
   for (const [mapKey, rawUser] of Object.entries(usersRaw)) {
@@ -841,9 +915,9 @@ async function readDb() {
     };
   }
 
-  const attendanceRaw = Array.isArray(parsed.attendance)
-    ? parsed.attendance
-    : convertLegacyAttendanceIfNeeded(parsed);
+  const attendanceRaw = Array.isArray(source.attendance)
+    ? source.attendance
+    : convertLegacyAttendanceIfNeeded(source);
 
   const attendance = attendanceRaw
     .map((item) => {
@@ -870,7 +944,7 @@ async function readDb() {
     })
     .filter(Boolean);
 
-  const dayConfigsRaw = parsed.dayConfigs && typeof parsed.dayConfigs === 'object' ? parsed.dayConfigs : {};
+  const dayConfigsRaw = source.dayConfigs && typeof source.dayConfigs === 'object' ? source.dayConfigs : {};
   const dayConfigs = {};
 
   for (const [dateKey, rawConfig] of Object.entries(dayConfigsRaw)) {
@@ -882,7 +956,7 @@ async function readDb() {
     dayConfigs[normalizedDate] = sanitizeDayConfig(rawConfig);
   }
 
-  const dataEditorsRaw = Array.isArray(parsed.dataEditors) ? parsed.dataEditors : [];
+  const dataEditorsRaw = Array.isArray(source.dataEditors) ? source.dataEditors : [];
   const dataEditors = Array.from(
     new Set(
       dataEditorsRaw
@@ -891,7 +965,7 @@ async function readDb() {
     )
   );
 
-  const gameScoresRaw = Array.isArray(parsed.gameScores) ? parsed.gameScores : [];
+  const gameScoresRaw = Array.isArray(source.gameScores) ? source.gameScores : [];
   const gameScores = gameScoresRaw
     .map((item) => {
       const usernameKey = usernameKeyFromInput(item?.usernameKey || item?.username);
@@ -924,8 +998,45 @@ async function readDb() {
   };
 }
 
+async function readDb() {
+  await ensureStorage();
+
+  if (DATABASE_URL) {
+    const pool = getPostgresPool();
+    const result = await pool.query(`SELECT data FROM ${POSTGRES_STATE_TABLE} WHERE id = 1`);
+    return normalizeDb(result.rows[0]?.data || cloneEmptyDb());
+  }
+
+  const raw = await fs.readFile(DATA_FILE, 'utf8');
+  const normalizedRaw = raw.replace(/^\uFEFF/, '');
+
+  if (!normalizedRaw.trim()) {
+    return cloneEmptyDb();
+  }
+
+  return normalizeDb(JSON.parse(normalizedRaw));
+}
+
 async function writeDb(db) {
-  await fs.writeFile(DATA_FILE, JSON.stringify(db, null, 2), 'utf8');
+  const normalizedDb = normalizeDb(db);
+
+  if (DATABASE_URL) {
+    const pool = getPostgresPool();
+    await ensurePostgresStorage();
+    await pool.query(
+      `
+      INSERT INTO ${POSTGRES_STATE_TABLE} (id, data, updated_at)
+      VALUES (1, $1::jsonb, now())
+      ON CONFLICT (id)
+      DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+    `,
+      [JSON.stringify(normalizedDb)]
+    );
+    return;
+  }
+
+  await ensureDataFile();
+  await fs.writeFile(DATA_FILE, JSON.stringify(normalizedDb, null, 2), 'utf8');
 }
 
 function readRequestBody(req) {
@@ -1695,7 +1806,7 @@ async function serveStatic(res, pathname) {
 }
 
 async function startServer() {
-  await ensureDataFile();
+  await ensureStorage();
 
   const server = http.createServer(async (req, res) => {
     const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);

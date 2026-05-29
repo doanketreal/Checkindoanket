@@ -552,15 +552,14 @@ function updateFixedStatsSummary(totals) {
   }
 
   const selectedCount = fixedStatsDates.filter((item) => item.enabled).length;
-  const totalCount = fixedStatsDates.length;
   const totalAmount = Array.from(totals.values()).reduce((sum, value) => sum + Number(value || 0), 0);
 
-  if (!totalCount) {
+  if (!selectedCount) {
     fixedStatsSummaryEl.textContent = 'Chưa chọn ngày nào để thống kê.';
     return;
   }
 
-  fixedStatsSummaryEl.textContent = `Đang tích ${selectedCount}/${totalCount} ngày. Tổng phải trả của thành viên cố định: ${formatCurrency(
+  fixedStatsSummaryEl.textContent = `Đang tích ${selectedCount} ngày. Tổng phải trả của thành viên cố định: ${formatCurrency(
     totalAmount
   )} VNĐ.`;
 }
@@ -591,8 +590,12 @@ function renderFixedStatsCalendar() {
       const existing = fixedStatsDates.find((item) => item.date === date);
 
       if (existing) {
-        existing.enabled = input.checked;
-      } else {
+        if (input.checked) {
+          existing.enabled = true;
+        } else {
+          fixedStatsDates = fixedStatsDates.filter((item) => item.date !== date);
+        }
+      } else if (input.checked) {
         fixedStatsDates.push({ date, enabled: input.checked });
         fixedStatsDates = fixedStatsDates.sort((a, b) => a.date.localeCompare(b.date));
       }
@@ -675,16 +678,10 @@ async function selectFixedStatsMonth() {
 
 async function clearFixedStatsMonth() {
   const monthPrefix = `${fixedStatsMonthKey}-`;
-  let changed = false;
+  const before = fixedStatsDates.length;
+  fixedStatsDates = fixedStatsDates.filter((item) => !item.date.startsWith(monthPrefix));
 
-  for (const item of fixedStatsDates) {
-    if (item.date.startsWith(monthPrefix) && item.enabled) {
-      item.enabled = false;
-      changed = true;
-    }
-  }
-
-  if (!changed) {
+  if (fixedStatsDates.length === before) {
     setStatus(`Không có ngày nào đang tích trong ${formatMonthLabel(fixedStatsMonthKey)}.`);
     return;
   }

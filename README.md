@@ -61,11 +61,15 @@ App chạy mặc định ở:
 - `PORT`
 - `AUTH_SECRET`
 - `RESET_PASSWORD_CODE` (mặc định: `doanketreal`)
+- `DATABASE_URL` hoặc `POSTGRES_URL` để lưu dữ liệu bền vững bằng PostgreSQL
+- `DATABASE_SSL=true` nếu database yêu cầu SSL
 
 ## Dữ liệu lưu
 
-File:
+Mặc định khi chạy local, app lưu vào file:
 - `data/attendance.json`
+
+Khi deploy Render, không nên dùng file local vì Render free có filesystem tạm. Hãy tạo PostgreSQL và thêm biến môi trường `DATABASE_URL`; app sẽ tự tạo bảng `attendance_app_state` và lưu toàn bộ dữ liệu vào đó.
 
 Cấu trúc chính:
 - `users`
@@ -73,3 +77,9 @@ Cấu trúc chính:
 - `dayConfigs`
 - `dataEditors`
 - `gameScores`
+
+## Render
+
+- Render free web service có thể ngủ sau một thời gian không có truy cập, nên lần mở đầu có thể chậm.
+- Render free không giữ dữ liệu ghi vào file local sau khi redeploy/restart/spin down.
+- Để không mất tài khoản, chấm công, data nhập và điểm game, cần dùng PostgreSQL qua `DATABASE_URL`.
